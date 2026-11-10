@@ -100,9 +100,6 @@ func checkMigrationState(dir string, maxSlots, defaultPort int) migrationReport 
 			issue("settings.json", "invalid_settings")
 		} else {
 			settings = loaded
-			if strings.TrimSpace(settings.SubToken) == "" {
-				issue("settings.json", "missing_subscription_token")
-			}
 		}
 	}
 	if blob, ok := read("password", false); ok && strings.TrimSpace(string(blob)) == "" {

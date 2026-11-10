@@ -217,7 +217,7 @@ func main() {
 	mux.HandleFunc("/api/update/apply", updater.apply)
 	mux.HandleFunc("/api/update/status", updater.status)
 
-	log.Printf("管理界面: http://<本机IP>%s%s/", webCfg.listenAddrString(), currentBasePath())
+	log.Printf("管理界面: http://%s%s/", webCfg.listenAddrString(), currentBasePath())
 	if base, fixed, err := fixedSlotPort(1); fixed && err == nil {
 		log.Printf("Exit Slot 固定端口基址为 %d（slot 1 使用 127.0.0.1:%d）", base, base)
 	} else {

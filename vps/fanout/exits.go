@@ -5,6 +5,12 @@ import (
 	"time"
 )
 
+const (
+	exitSourceStable   = "xnvgatebox_stable"
+	exitSourceHome     = "new_residential"
+	exitSourceNativeDC = "new_native_datacenter"
+)
+
 // ExitInbound 是挂在某个出口上的一个受管入站。
 type ExitInbound struct {
 	ManagedSlot bool   `json:"managed_slot,omitempty"`
@@ -37,6 +43,14 @@ type Exit struct {
 	Policy            SlotPolicy     `json:"policy"`
 	LatencyMS         float64        `json:"latency_ms,omitempty"`
 	CanRollbackPolicy bool           `json:"can_rollback_policy"`
+	SourceCategory    string         `json:"source_category"`
+	SourceName        string         `json:"source_name,omitempty"`
+	Native            bool           `json:"native,omitempty"`
+	// ProxyAddress/ProxyPort are omitted for the original stable slots, whose
+	// SOCKS listener is always loopback. Supplemental verified exits carry an
+	// explicit public upstream and never reuse the stable slot namespace.
+	ProxyAddress string `json:"proxy_address,omitempty"`
+	ProxyPort    int    `json:"proxy_port,omitempty"`
 	// SOCKS5 凭据：界面要能看、能复制、能改
 	PublicSocks *SocksExposure `json:"public_socks,omitempty"`
 	SocksUser   string         `json:"socks_user"`
@@ -132,8 +146,15 @@ func (m *Manager) ExitsOf() ExitsView {
 			Egress: snapshot.Egress,
 			Policy: t.policySnapshot(), LatencyMS: snapshot.LatencyMS,
 			CanRollbackPolicy: snapshot.CanRollbackPolicy,
+			SourceCategory:    exitSourceStable,
+			SourceName:        "VPN Gate · xnvgatebox stable",
 			SocksUser:         cred.User, SocksPass: cred.Pass,
 		})
+	}
+	// Supplemental exits are file-backed and independent of the tunnel manager.
+	// A corrupt/expired optional file never hides or mutates stable exits.
+	if extra, err := loadSupplementalExits(m.workDir); err == nil {
+		view.Exits = append(view.Exits, extra...)
 	}
 
 	if p, err := openPanel(); err == nil {

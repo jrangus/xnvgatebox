@@ -15,6 +15,20 @@
 
 当前版本：[v0.9.6](https://github.com/hanhaoops/xnvgatebox/releases/tag/v0.9.6)。统一安装入口支持 Debian 12/13、Ubuntu 22.04/24.04 和 CentOS Stream 9/10。六个系统已通过自动安装、更新及卸载测试；CentOS 独立 VPS 验收尚未完成。CentOS 7/8（含 Stream 8）不在支持范围。
 
+## 3x-ui 补充出口池
+
+`jrangus` 分支为 3x-ui 集成增加了一个与原稳定隧道完全隔离的可选池：
+
+- 原有 VPN Gate + xnvgatebox 槽位始终标记为 `xnvgatebox_stable`；
+- 免费公开 SOCKS5 只作为候选，必须由 VPS 重做双出口 IP、HTTPS 内容、远程 DNS、地区和 IP 类型检测；
+- 只有 `strict_residential` / `likely_residential` 进入 `new_residential`；
+- 只有原生地区证据通过且属于 `datacenter` / `business_isp` 的出口进入 `new_native_datacenter`；
+- 新增池使用 `100000-999999` 独立确定性槽位，不占用或替换稳定池槽位；
+- 刷新为空、失败或文件损坏时保留原稳定池，成功结果原子替换；启用后在证据临近过期时自动刷新；
+- 停用会先取消并等待正在执行的刷新，再把新增清单改名保留，不删除稳定隧道。
+
+在集成控制台的“代理资源 → 免费验证池”中手动首次启用。免费公共代理由未知第三方运营，可能记录或篡改未加密流量，不得用于账号、支付或隐私数据。
+
 以上系统均以 root 执行同一段命令，自动选择 APT 或 DNF：
 
 ```sh

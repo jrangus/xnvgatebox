@@ -33,6 +33,7 @@ type ThirdPartyRecord struct {
 	Country   string    `json:"country,omitempty"`
 	City      string    `json:"city,omitempty"`
 	IPType    string    `json:"ip_type"`
+	Native    bool      `json:"native,omitempty"`
 	CheckedAt time.Time `json:"checked_at,omitempty"`
 	ExpiresAt time.Time `json:"expires_at,omitempty"`
 }
@@ -94,7 +95,7 @@ func thirdPartyRecord(p ThirdPartyProxy, r ThirdPartyRecord) ThirdPartyRecord {
 		if r.Status == "passed" {
 			r.Status = "expired"
 		}
-		r.Country, r.City, r.IPType = "", "", "unknown"
+		r.Country, r.City, r.IPType, r.Native = "", "", "unknown", false
 	}
 	r.Digest = ""
 	return r

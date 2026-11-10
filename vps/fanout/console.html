@@ -1226,7 +1226,28 @@
           <div class="actions" style="margin-bottom: 20px">
             <button id="resourceSocksTab" class="primary">VPS SOCKS5</button
             ><button id="resourceSstpTab">原始 SSTP</button
-            ><button id="resourceThirdTab">第三方 SOCKS5</button>
+            ><button id="resourceThirdTab">第三方 SOCKS5</button
+            ><button id="resourceSupplementalTab">免费验证池</button>
+          </div>
+          <div id="resourceSupplementalPane" hidden>
+            <div class="notice warning">
+              免费公共 SOCKS5 仅作为候选。VPS 会重新验证 HTTPS、固定出口、地区和 IP
+              类型；只有确认住宅/疑似住宅，或已验证原生的数据中心/商业 ISP 才会进入此池。
+              它与 xnvgatebox 稳定池完全分离，失败不会回落到 VPS 直连。公共代理不适合传输敏感账号、支付或隐私数据。
+            </div>
+            <div class="sectionhead">
+              <div><h2>免费验证池</h2><small id="supplementalStatus">尚未刷新</small></div>
+              <div class="actions">
+                <button class="primary" id="supplementalRefresh">获取并由 VPS 验证</button>
+                <button id="supplementalDisable">停用新增池</button>
+              </div>
+            </div>
+            <div class="tablewrap card">
+              <table>
+                <thead><tr><th>独立分类</th><th>地区</th><th>实际出口</th><th>类型</th><th>延迟</th></tr></thead>
+                <tbody id="supplementalRows"></tbody>
+              </table>
+            </div>
           </div>
           <div id="resourceThirdPane" hidden>
             <div class="notice">
@@ -1793,6 +1814,7 @@
         resourceSelected = new Set(),
         resourceSubmitting = new Set(),
         resourcesPolling = null,
+        supplementalData = { active: 0, exits: [] },
         resourceEpoch = 0,
         sstpSettingsDirty = false,
         currentExit = null,
@@ -2665,6 +2687,12 @@
         renderThirdParties();
         renderSubscription();
       }
+      async function loadSupplemental() {
+        supplementalData = await api("api/resources/supplemental");
+        renderResources();
+        if (supplementalData.running)
+          setTimeout(() => currentPage === "resources" && resourceTab === "supplemental" && action(loadSupplemental), 3000);
+      }
       async function checkThirdParty(id) {
         thirdEpoch++;
         thirdSubmitting.add(id);
@@ -2912,6 +2940,22 @@
           resourceTab === "third",
         );
         renderThirdParties();
+        $("resourceSupplementalPane").hidden = resourceTab !== "supplemental";
+        $("resourceSupplementalTab").classList.toggle("primary", resourceTab === "supplemental");
+        const supplementalExits = supplementalData.exits || [];
+        $("supplementalStatus").textContent = supplementalData.running
+          ? "正在从公开候选中实测，请勿重复提交"
+          : supplementalData.last_error
+            ? "上次刷新未替换旧池：" + supplementalData.last_error
+            : "当前 " + (supplementalData.active || 0) + " 个；上次保留 " + (supplementalData.last_kept || 0) + " 个";
+        $("supplementalRows").innerHTML = supplementalExits.length
+          ? supplementalExits.map((e) => "<tr><td>" +
+              (e.source_category === "new_residential" ? "新增住宅 IP" : "新增原生机房 IP") +
+              "</td><td>" + esc(e.country || e.region || "—") +
+              "</td><td>" + esc(e.exit_ip || "—") +
+              "</td><td>" + esc(types[e.egress?.ip_type] || e.egress?.ip_type || "—") +
+              "</td><td>" + (e.latency_ms ? Math.round(e.latency_ms) + " ms" : "—") + "</td></tr>").join("")
+          : '<tr><td colspan="5" class="empty">尚无通过 VPS 严格验证的新增出口；xnvgatebox 稳定池不受影响。</td></tr>';
         $("resourceSocksPane").hidden = resourceTab !== "socks";
         $("resourceSstpPane").hidden = resourceTab !== "sstp";
         $("resourceSocksTab").classList.toggle(
@@ -3129,6 +3173,21 @@
         resourceTab = "socks";
         renderResources();
       };
+      $("resourceSupplementalTab").onclick = () => {
+        resourceTab = "supplemental";
+        renderResources();
+        action(loadSupplemental);
+      };
+      $("supplementalRefresh").onclick = () => action(async () => {
+        await api("api/resources/supplemental/refresh", {});
+        toast("已开始在 VPS 上验证免费候选；旧池会保留到新结果验证完成");
+        await loadSupplemental();
+      }, $("supplementalRefresh"));
+      $("supplementalDisable").onclick = () => action(async () => {
+        await api("api/resources/supplemental/disable", {});
+        toast("新增池已停用；xnvgatebox 稳定池保持不变");
+        await loadSupplemental();
+      }, $("supplementalDisable"));
       $("resourceSstpTab").onclick = () => {
         resourceTab = "sstp";
         renderResources();

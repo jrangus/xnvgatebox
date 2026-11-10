@@ -31,6 +31,7 @@ func probeThirdParty(ctx context.Context, p ThirdPartyProxy, dir string) ThirdPa
 	}
 	if image.IntelligenceStatus == "passed" {
 		r.City, r.IPType = stringValue(image.City), image.IPType
+		r.Native = image.CountryEvidence != nil && image.CountryEvidence.Status == "passed" && r.Country != ""
 		if exp, err := time.Parse(time.RFC3339Nano, image.ExpiresAt); err == nil && exp.Before(r.ExpiresAt) {
 			r.ExpiresAt = exp
 		}
@@ -40,7 +41,10 @@ func probeThirdParty(ctx context.Context, p ThirdPartyProxy, dir string) ThirdPa
 }
 
 func thirdPartyHTTPClient(p ThirdPartyProxy) *http.Client {
-	u := &url.URL{Scheme: "socks5h", Host: net.JoinHostPort(p.Host, strconv.Itoa(p.Port)), User: url.UserPassword(p.Username, p.Password)}
+	u := &url.URL{Scheme: "socks5h", Host: net.JoinHostPort(p.Host, strconv.Itoa(p.Port))}
+	if p.Username != "" || p.Password != "" {
+		u.User = url.UserPassword(p.Username, p.Password)
+	}
 	tr := &http.Transport{Proxy: http.ProxyURL(u), TLSHandshakeTimeout: 15 * time.Second, DisableKeepAlives: true}
 	return &http.Client{Transport: tr, Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }

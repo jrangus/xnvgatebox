@@ -103,6 +103,22 @@ func TestMigrationMissingStateOnlyAcceptsInstallationsWithoutSlots(t *testing.T)
 	}
 }
 
+func TestMigrationAcceptsFreshInstallBeforeSubscriptionTokenIsCreated(t *testing.T) {
+	dir := migrationFixture(t)
+	os.Remove(filepath.Join(dir, "state.json"))
+	os.Remove(filepath.Join(dir, "native.previous.json"))
+	if err := os.WriteFile(filepath.Join(dir, "native.json"), []byte(`{"next_id":1,"inbounds":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"port":8899,"listen_addr":"0.0.0.0","residential_only":false}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	report := checkMigrationState(dir, 32, 8899)
+	if !report.ConfigValid {
+		t.Fatalf("fresh install without a lazily-created subscription token must remain upgradeable: %+v", report)
+	}
+}
+
 func TestMigrationV031PreparationPreservesBindingsWithoutRevivingHealth(t *testing.T) {
 	dir := migrationFixture(t)
 	blob, _ := os.ReadFile(statePath(dir))
@@ -238,7 +254,6 @@ func TestMigrationCheckInvalidFilesDoNotLeakValues(t *testing.T) {
 	for _, tc := range []struct{ file, content string }{
 		{"settings.json", "null"},
 		{"settings.json", `{"port":-1,"sub_token":"fixture-private-token"}`},
-		{"settings.json", `{"port":8899}`},
 		{"password", "\n"},
 		{"basepath", "fixture-private-entry/forbidden"},
 		{"native.json", "null"},
