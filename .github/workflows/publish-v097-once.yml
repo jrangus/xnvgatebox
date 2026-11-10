@@ -16,6 +16,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
+      SOURCE_REF: release-v0.9.7-source
       SOURCE_SHA: 94154917da8955838289d2994249ae91ceb9fff0
       RELEASE_TAG: v0.9.7
     steps:
@@ -23,7 +24,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh workflow run vps.yml --ref "$SOURCE_SHA" -f version="$RELEASE_TAG" -f live_mirror=false
+          gh workflow run vps.yml --ref "$SOURCE_REF" -f version="$RELEASE_TAG" -f live_mirror=false
           RUN_ID=""
           for attempt in $(seq 1 30); do
             RUN_ID="$(gh run list --workflow vps.yml --event workflow_dispatch --commit "$SOURCE_SHA" --limit 10 --json databaseId --jq '.[0].databaseId // empty')"
