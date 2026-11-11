@@ -130,8 +130,15 @@ func stringValue(p *string) string {
 // Country has independent evidence. Type, ISP and ASN still require full
 // intelligence; missing fields never prove that an exit avoids a blacklist.
 func (p SlotPolicy) checkImage(image EgressProfile) error {
-	if image.Protocol != "openvpn" || image.IP == "" {
-		return fmt.Errorf("缺少对应 OpenVPN 出口画像")
+	return p.checkImageForProtocol(image, tunnelTransportOpenVPN)
+}
+
+func (p SlotPolicy) checkImageForProtocol(image EgressProfile, protocol string) error {
+	if protocol != tunnelTransportOpenVPN && protocol != tunnelTransportSSTP {
+		return fmt.Errorf("未知出口协议")
+	}
+	if image.Protocol != protocol || image.IP == "" {
+		return fmt.Errorf("缺少对应 %s 出口画像", strings.ToUpper(protocol))
 	}
 	if image.IntelligenceStatus == "passed" {
 		expiry, err := time.Parse(time.RFC3339Nano, image.ExpiresAt)

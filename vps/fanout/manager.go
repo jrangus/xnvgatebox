@@ -160,13 +160,16 @@ func (m *Manager) StartWithPolicy(node Node, policy SlotPolicy) (*Tunnel, error)
 		return nil, err
 	}
 	t := &Tunnel{
-		Slot:   slot,
-		Port:   port,
-		Node:   node,
-		Status: "starting",
-		Since:  time.Now(),
-		Cred:   cred,
-		Policy: &policy,
+		Slot:           slot,
+		Port:           port,
+		Node:           node,
+		Status:         "starting",
+		Since:          time.Now(),
+		Cred:           cred,
+		Policy:         &policy,
+		Transport:      tunnelTransportOpenVPN,
+		SourceCategory: exitSourceStable,
+		SourceName:     "VPN Gate · xnvgatebox stable",
 	}
 	t.resetWork()
 	m.tunnels[slot] = t
@@ -357,7 +360,11 @@ func (m *Manager) tryNode(t *Tunnel) error {
 		return err
 	}
 	t.probePhase("connecting")
-	if err := t.startOpenVPN(m.workDir); err != nil {
+	if t.transport() == tunnelTransportSSTP {
+		if err := t.startSSTP(m.workDir); err != nil {
+			return err
+		}
+	} else if err := t.startOpenVPN(m.workDir); err != nil {
 		return err
 	}
 	if t.listener == nil {
@@ -371,18 +378,21 @@ func (m *Manager) tryNode(t *Tunnel) error {
 		return err
 	}
 	if host := hostPublicIP(); host != "" && ip == host {
-		return fmt.Errorf("OpenVPN 未提供独立出口，namespace 回落到母机公网 IP %s", host)
+		return fmt.Errorf("%s 未提供独立出口，namespace 回落到母机公网 IP %s", strings.ToUpper(t.transport()), host)
 	}
 	t.mu.Lock()
 	t.ExitIP = ip
 	t.mu.Unlock()
 	t.probePhase("profile")
 	image := lookupOpenVPNEgressContext(t.workContext(), m.evidenceDir, ip)
+	if t.transport() == tunnelTransportSSTP {
+		image = lookupSstpEgress(t.workContext(), m.evidenceDir, ip)
+	}
 	if !m.tunnelActive(t) {
 		return fmt.Errorf("画像查询期间 Slot 已停止")
 	}
 	policy := t.policySnapshot()
-	if err := policy.checkImage(image); err != nil {
+	if err := policy.checkImageForProtocol(image, t.transport()); err != nil {
 		return err
 	}
 	t.setValidating(true)
@@ -407,18 +417,20 @@ func (m *Manager) tryNode(t *Tunnel) error {
 	if err := t.acceptExitEvidence(ip, actual, image); err != nil {
 		return err
 	}
-	public := image
-	public.Raw = nil
-	t.mu.Lock()
-	t.Node.OpenVPNEgress = &public
-	t.Node.ExpectedExitIP, t.Node.OpenVPNStatus, t.Node.IPType = ip, "passed", image.IPType
-	t.Node.ISP, t.Node.ASN = stringValue(image.ISP), stringValue(image.ASN)
-	t.Node.Residential = image.IPType == "strict_residential" || image.IPType == "likely_residential"
-	observed := t.Node
-	t.mu.Unlock()
-	m.mu.Lock()
-	m.localEvidence[observed.HostName] = observed
-	m.mu.Unlock()
+	if t.transport() == tunnelTransportOpenVPN {
+		public := image
+		public.Raw = nil
+		t.mu.Lock()
+		t.Node.OpenVPNEgress = &public
+		t.Node.ExpectedExitIP, t.Node.OpenVPNStatus, t.Node.IPType = ip, "passed", image.IPType
+		t.Node.ISP, t.Node.ASN = stringValue(image.ISP), stringValue(image.ASN)
+		t.Node.Residential = image.IPType == "strict_residential" || image.IPType == "likely_residential"
+		observed := t.Node
+		t.mu.Unlock()
+		m.mu.Lock()
+		m.localEvidence[observed.HostName] = observed
+		m.mu.Unlock()
+	}
 	return nil
 }
 
@@ -432,6 +444,12 @@ func (m *Manager) candidatesFor(t *Tunnel) []Node {
 	t.mu.Lock()
 	first := t.Node
 	t.mu.Unlock()
+	if t.transport() == tunnelTransportSSTP {
+		if first.HostName == "" || m.nodeInUse(first.HostName, t.Slot) {
+			return nil
+		}
+		return []Node{first}
+	}
 	avoid := t.swapAvoid()
 	out := []Node{}
 	eligible := func(n Node) bool {
@@ -552,6 +570,9 @@ func (m *Manager) Swap(slot int) error {
 	if !ok {
 		return fmt.Errorf("槽位 %d 没有运行中的隧道", slot)
 	}
+	if t.transport() == tunnelTransportSSTP {
+		return fmt.Errorf("持久 SSTP 出口不能切换为 OpenVPN 节点")
+	}
 	t.changeMu.Lock()
 	defer t.changeMu.Unlock()
 	if t.Status == "stopped" {
@@ -586,6 +607,9 @@ func (m *Manager) SwapTo(slot int, host string) error {
 	m.mu.RUnlock()
 	if !ok {
 		return fmt.Errorf("槽位 %d 没有运行中的隧道", slot)
+	}
+	if t.transport() == tunnelTransportSSTP {
+		return fmt.Errorf("持久 SSTP 出口固定使用已验证端点；请在原始 SSTP 页检测并加入另一个出口")
 	}
 	if node.HostName == "" {
 		return fmt.Errorf("节点不存在，可能节点池已刷新")

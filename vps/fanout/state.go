@@ -12,12 +12,19 @@ import (
 // persistedTunnel 是隧道在磁盘上的形态。
 // 只存重建所需的信息，运行态（netns、进程、监听）重启后重新建立。
 type persistedTunnel struct {
-	Slot        int    `json:"slot"`
-	Port        int    `json:"port"`
-	HostName    string `json:"hostname"`
-	CountryCode string `json:"country_code"`
-	Country     string `json:"country"`
-	Config      string `json:"config"`
+	Slot           int            `json:"slot"`
+	Port           int            `json:"port"`
+	HostName       string         `json:"hostname"`
+	CountryCode    string         `json:"country_code"`
+	Country        string         `json:"country"`
+	Config         string         `json:"config"`
+	ServerIP       string         `json:"server_ip,omitempty"`
+	SSTPCandidates []SstpEndpoint `json:"sstp_candidates,omitempty"`
+	Transport      string         `json:"transport,omitempty"`
+	SSTPPort       int            `json:"sstp_port,omitempty"`
+	SourceCategory string         `json:"source_category,omitempty"`
+	SourceName     string         `json:"source_name,omitempty"`
+	Native         bool           `json:"native,omitempty"`
 	// SOCKS5 凭据要存盘：用户已经把它分发给客户端了，重启后变掉等于全断
 	SocksUser string `json:"socks_user,omitempty"`
 	SocksPass string `json:"socks_pass,omitempty"`
@@ -62,6 +69,13 @@ func (m *Manager) saveState() error {
 			CountryCode:    t.Node.CountryCode,
 			Country:        t.Node.Country,
 			Config:         t.Node.Config,
+			ServerIP:       t.Node.IP,
+			SSTPCandidates: append([]SstpEndpoint(nil), t.Node.SSTPCandidates...),
+			Transport:      t.transport(),
+			SSTPPort:       t.SSTPPort,
+			SourceCategory: t.sourceCategory(),
+			SourceName:     t.SourceName,
+			Native:         t.Native,
 			SocksUser:      t.Cred.User,
 			SocksPass:      t.Cred.Pass,
 			PrevHost:       t.prevHost,
@@ -172,6 +186,32 @@ func decodePersistedState(blob []byte, maxSlots int, residential bool) (*persist
 			return nil, fmt.Errorf("Slot %d 策略无效", p.Slot)
 		}
 		p.Policy = &normalized
+		if p.Transport == "" {
+			p.Transport = tunnelTransportOpenVPN
+		}
+		if p.Transport != tunnelTransportOpenVPN && p.Transport != tunnelTransportSSTP {
+			return nil, fmt.Errorf("Slot %d 持久化出口协议无效", p.Slot)
+		}
+		if p.SourceCategory == "" {
+			p.SourceCategory = exitSourceStable
+		}
+		if p.Transport == tunnelTransportOpenVPN {
+			if p.SourceCategory != exitSourceStable || p.SSTPPort != 0 {
+				return nil, fmt.Errorf("Slot %d 稳定出口来源无效", p.Slot)
+			}
+		} else {
+			if (p.SourceCategory != exitSourceHome && p.SourceCategory != exitSourceNativeDC) || p.SSTPPort < 1 || p.SSTPPort > 65535 || !sstpPublicIPv4(p.ServerIP) {
+				return nil, fmt.Errorf("Slot %d 持久 SSTP 来源无效", p.Slot)
+			}
+			candidateNode := Node{HostName: p.HostName, IP: p.ServerIP, SSTPCandidates: p.SSTPCandidates}
+			matched := false
+			for _, endpoint := range p.SSTPCandidates {
+				matched = matched || (endpoint.Port == p.SSTPPort && officialSstpEndpoint(candidateNode, endpoint))
+			}
+			if !matched {
+				return nil, fmt.Errorf("Slot %d 持久 SSTP 端点无效", p.Slot)
+			}
+		}
 		if p.PreviousPolicy != nil {
 			before, err := normalizePolicy(*p.PreviousPolicy)
 			if err != nil {
@@ -206,18 +246,22 @@ func prepareRestoredTunnels(st *persistedState, nodes []Node) ([]*Tunnel, error)
 	tunnels := make([]*Tunnel, 0, len(st.Tunnels))
 	for _, p := range st.Tunnels {
 		node, ok := known[p.HostName]
-		if !ok {
+		if !ok || p.Transport == tunnelTransportSSTP {
 			// 节点已从 VPN Gate 列表消失，用存盘的信息重建
+			// SSTP 则无论当前清单是否还有同名节点，都必须继续使用当时
+			// 实测并持久化的 IP、证书主机名和端口；同名记录的新地址必须
+			// 重新检测，不能在重启恢复时悄悄替换安全边界。
 			node = Node{
-				HostName:    p.HostName,
-				CountryCode: p.CountryCode,
-				Country:     p.Country,
+				HostName:       p.HostName,
+				CountryCode:    p.CountryCode,
+				Country:        p.Country,
+				IP:             p.ServerIP,
+				SSTPCandidates: append([]SstpEndpoint(nil), p.SSTPCandidates...),
 			}
 		}
-		// Prefer the current shared-pool profile when the node has changed IP
-		// or configuration since the last restart. Keep the saved profile only
-		// for nodes no longer present in the pool.
-		if node.Config == "" {
+		if p.Transport == tunnelTransportSSTP {
+			node.Config = fmt.Sprintf("proto tcp\nremote %s %d\n", node.IP, p.SSTPPort)
+		} else if node.Config == "" {
 			node.Config = p.Config
 		}
 		// 从旧版本升上来的状态文件没有凭据字段，补一套新的
@@ -237,6 +281,11 @@ func prepareRestoredTunnels(st *persistedState, nodes []Node) ([]*Tunnel, error)
 			Cred:           cred,
 			Policy:         p.Policy,
 			previousPolicy: p.PreviousPolicy,
+			Transport:      p.Transport,
+			SSTPPort:       p.SSTPPort,
+			SourceCategory: p.SourceCategory,
+			SourceName:     p.SourceName,
+			Native:         p.Native,
 		}
 		bindingHost := p.PrevHost
 		if bindingHost == "" {

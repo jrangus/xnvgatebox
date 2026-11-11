@@ -34,10 +34,18 @@ type Tunnel struct {
 	Policy         *SlotPolicy `json:"policy,omitempty"`
 	previousPolicy *SlotPolicy
 	LatencyMS      float64 `json:"latency_ms,omitempty"`
+	// Transport is openvpn for the original xnvgatebox slots and sstp for a
+	// VPS-hosted SSTP exit promoted from the verified resource page.
+	Transport      string `json:"transport,omitempty"`
+	SSTPPort       int    `json:"sstp_port,omitempty"`
+	SourceCategory string `json:"source_category,omitempty"`
+	SourceName     string `json:"source_name,omitempty"`
+	Native         bool   `json:"native,omitempty"`
 
 	ns                  string
 	listener            net.Listener
 	ovpn                *exec.Cmd
+	sstpDir             string
 	mu                  sync.Mutex
 	opMu                sync.Mutex
 	changeMu            sync.Mutex
@@ -67,6 +75,25 @@ type Tunnel struct {
 	// 两边对不上，那个入站就掉成了没人认领的孤儿。
 	// 这个字段跟着状态一起落盘，重启后照着它把入站接回来。
 	prevHost string
+}
+
+const (
+	tunnelTransportOpenVPN = "openvpn"
+	tunnelTransportSSTP    = "sstp"
+)
+
+func (t *Tunnel) transport() string {
+	if t.Transport == tunnelTransportSSTP {
+		return tunnelTransportSSTP
+	}
+	return tunnelTransportOpenVPN
+}
+
+func (t *Tunnel) sourceCategory() string {
+	if t.SourceCategory == exitSourceHome || t.SourceCategory == exitSourceNativeDC {
+		return t.SourceCategory
+	}
+	return exitSourceStable
 }
 
 // prevHostOf 读"换节点未收尾"标记。
@@ -247,6 +274,10 @@ func (t *Tunnel) teardownNetns() {
 		_ = t.ovpn.Process.Kill()
 		t.ovpn = nil
 	}
+	if t.sstpDir != "" {
+		_ = os.RemoveAll(t.sstpDir)
+		t.sstpDir = ""
+	}
 	removeKillSwitch(t)
 	runQuiet("ip", "netns", "del", ns)
 	runQuiet("ip", "link", "del", veth)
@@ -397,7 +428,7 @@ func (t *Tunnel) acceptsSocksLocked() bool {
 		return false
 	}
 	if t.Policy != nil {
-		if t.egress == nil || t.Policy.checkImage(*t.egress) != nil || t.Policy.checkLatency(t.LatencyMS) != nil {
+		if t.egress == nil || t.Policy.checkImageForProtocol(*t.egress, t.transport()) != nil || t.Policy.checkLatency(t.LatencyMS) != nil {
 			return false
 		}
 	}

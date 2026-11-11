@@ -129,8 +129,8 @@ func (t *Tunnel) clearEgress() {
 }
 
 func (t *Tunnel) acceptExitEvidence(expected, actual string, image EgressProfile) error {
-	if expected == "" || expected != actual || image.IP != expected || image.Protocol != "openvpn" {
-		return fmt.Errorf("OpenVPN 基线、画像与 SOCKS 出口不一致")
+	if expected == "" || expected != actual || image.IP != expected || image.Protocol != t.transport() {
+		return fmt.Errorf("%s 基线、画像与 SOCKS 出口不一致", strings.ToUpper(t.transport()))
 	}
 	t.mu.Lock()
 	t.egress = &image
@@ -194,6 +194,8 @@ type slotHealthEvidence struct {
 	Egress         *EgressProfile `json:"egress"`
 	LatencyMS      float64        `json:"latency_ms,omitempty"`
 	Policy         *SlotPolicy    `json:"policy,omitempty"`
+	Transport      string         `json:"transport,omitempty"`
+	SourceCategory string         `json:"source_category,omitempty"`
 }
 
 func (m *Manager) saveSlotHealth() error {
@@ -203,7 +205,8 @@ func (m *Manager) saveSlotHealth() error {
 		image := t.egressSnapshotLocked(true)
 		entry := slotHealthEvidence{SlotID: fmt.Sprintf("slot-%02d", t.Slot),
 			Hostname: t.Node.HostName, PoolNodeID: t.Node.PoolNodeID,
-			ProfileSHA256: profileDigest(t.Node.Config), SocksPort: t.Port, Status: t.Status, Egress: image, LatencyMS: t.LatencyMS, Policy: t.Policy}
+			ProfileSHA256: profileDigest(t.Node.Config), SocksPort: t.Port, Status: t.Status, Egress: image, LatencyMS: t.LatencyMS, Policy: t.Policy,
+			Transport: t.transport(), SourceCategory: t.sourceCategory()}
 		// An IP left from a failed probe is not a successful SOCKS observation.
 		if t.Status == "up" && image != nil {
 			entry.ExpectedExitIP = t.egressExpectedIP
@@ -214,7 +217,7 @@ func (m *Manager) saveSlotHealth() error {
 		entries = append(entries, entry)
 	}
 	blob, err := json.MarshalIndent(map[string]interface{}{
-		"observed_by": "vps-openvpn-socks", "generated_at": time.Now().UTC().Format(time.RFC3339Nano), "slots": entries,
+		"observed_by": "vps-managed-socks", "generated_at": time.Now().UTC().Format(time.RFC3339Nano), "slots": entries,
 	}, "", "  ")
 	if err != nil {
 		return err

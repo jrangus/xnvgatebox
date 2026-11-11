@@ -78,7 +78,7 @@ func (m *Manager) tunnelHealthy(t *Tunnel) bool {
 	}
 	if t.Policy != nil {
 		image := t.egressSnapshot(false)
-		if image == nil || t.policySnapshot().checkImage(*image) != nil || t.policySnapshot().checkLatency(latency) != nil {
+		if image == nil || t.policySnapshot().checkImageForProtocol(*image, t.transport()) != nil || t.policySnapshot().checkLatency(latency) != nil {
 			t.blockForPolicy("当前画像或本机 SOCKS 延迟不满足 Slot 策略")
 			return false
 		}

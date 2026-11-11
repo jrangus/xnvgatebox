@@ -167,6 +167,7 @@ func normalizeSupplementalEntry(entry supplementalEntry, manifest supplementalMa
 		ExitIP: exitIP, Status: "up", Since: entry.CheckedAt.UTC(), Egress: profile,
 		LatencyMS: entry.LatencyMS, SourceCategory: entry.SourceCategory,
 		SourceName: entry.SourceName, Native: entry.Native,
+		Transport:    "socks5",
 		ProxyAddress: proxyIP, ProxyPort: entry.Port,
 		SocksUser: entry.Username, SocksPass: entry.Password,
 	}, nil

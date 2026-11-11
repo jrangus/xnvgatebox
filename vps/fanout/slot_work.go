@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"strings"
 	"time"
 )
 
@@ -154,6 +155,24 @@ func (m *Manager) SetSlotPolicy(slot int, p SlotPolicy) error {
 	m.mu.RUnlock()
 	if t == nil {
 		return fmt.Errorf("Slot 不存在")
+	}
+	if t.transport() == tunnelTransportSSTP {
+		allowed := map[string]bool{}
+		switch t.sourceCategory() {
+		case exitSourceHome:
+			allowed["strict_residential"], allowed["likely_residential"] = true, true
+		case exitSourceNativeDC:
+			allowed["datacenter"], allowed["business_isp"] = true, true
+		}
+		for _, kind := range normalized.AllowedIPTypes {
+			if !allowed[kind] {
+				return fmt.Errorf("持久 SSTP 策略不能跨越其出口来源分类")
+			}
+		}
+		current := t.policySnapshot()
+		if current.Country != "" && !strings.EqualFold(normalized.Country, current.Country) {
+			return fmt.Errorf("持久 SSTP 出口国家由实际测量固定，不能改为其他国家")
+		}
 	}
 	t.changeMu.Lock()
 	defer t.changeMu.Unlock()

@@ -15,6 +15,10 @@ const context = (api) => {
   vm.runInContext(source, c); return c;
 };
 
+assert.match(html, /data-sstp-promote=/, 'verified SSTP has no VPS promotion control');
+assert.match(html, /api\/resources\/sstp\/promote/, 'promotion control is not wired to the private API');
+assert.match(html, /不会回落到 VPS 直连/, 'persistent SSTP does not explain fail-closed behavior');
+
 // A terminal deferred/cancelled/save failure must never revert to "not tested".
 for (const status of ['deferred', 'cancelled', 'failed', 'queued', 'running']) {
   const c = context(() => {}); const n = row(); n.attempt = {status,code:'candidate_in_use'};

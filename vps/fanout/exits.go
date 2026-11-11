@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"sync"
 	"time"
 )
@@ -46,6 +47,7 @@ type Exit struct {
 	SourceCategory    string         `json:"source_category"`
 	SourceName        string         `json:"source_name,omitempty"`
 	Native            bool           `json:"native,omitempty"`
+	Transport         string         `json:"transport,omitempty"`
 	// ProxyAddress/ProxyPort are omitted for the original stable slots, whose
 	// SOCKS listener is always loopback. Supplemental verified exits carry an
 	// explicit public upstream and never reuse the stable slot namespace.
@@ -139,6 +141,10 @@ func (m *Manager) ExitsOf() ExitsView {
 			byHost[sanitizeTag(snapshot.Node.HostName)] = i
 		}
 		cred := snapshot.Cred
+		sourceName := strings.TrimSpace(t.SourceName)
+		if sourceName == "" {
+			sourceName = "VPN Gate · xnvgatebox stable"
+		}
 		view.Exits = append(view.Exits, Exit{
 			Slot: snapshot.Slot, Port: snapshot.Port, Host: snapshot.Node.HostName,
 			Region: snapshot.Node.CountryCode, Country: nodeLabel(snapshot.Node),
@@ -146,8 +152,10 @@ func (m *Manager) ExitsOf() ExitsView {
 			Egress: snapshot.Egress,
 			Policy: t.policySnapshot(), LatencyMS: snapshot.LatencyMS,
 			CanRollbackPolicy: snapshot.CanRollbackPolicy,
-			SourceCategory:    exitSourceStable,
-			SourceName:        "VPN Gate · xnvgatebox stable",
+			SourceCategory:    t.sourceCategory(),
+			SourceName:        sourceName,
+			Native:            t.Native,
+			Transport:         t.transport(),
 			SocksUser:         cred.User, SocksPass: cred.Pass,
 		})
 	}

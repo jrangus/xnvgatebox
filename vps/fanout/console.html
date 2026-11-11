@@ -1310,21 +1310,23 @@
           </div>
           <div id="resourceSstpPane" hidden>
             <div class="notice">
-              原始 SSTP 直接连接 VPN Gate，不是 VPS 的 SOCKS5 端口。这里验证的是
-              VPS 出网结果；CF 仍暂停，全部标记为 CF
-              待验证。来源地区不代表实际出口国家。
+              通过 VPS 检测的住宅或原生机房 SSTP，可以点击“加入 VPS
+              出口池”。系统会在独立网络命名空间内持续维护 SSTP/PPP，并生成仅监听
+              127.0.0.1 的 SOCKS5 出口；之后可像 xnvgatebox 稳定池一样在 3x-ui
+              中生成 VLESS/VMess/Trojan 订阅。它仍归入“新增住宅”或“新增原生机房”，不会混入
+              xnvgatebox 稳定池。CF 仍暂停，来源地区不代表实际出口国家。
             </div>
             <details class="card pad" style="margin: 20px 0">
-              <summary>原始 SSTP 怎样使用？</summary>
+              <summary>直接 SSTP 与 VPS 出口有什么区别？</summary>
               <p style="margin: 12px 0">
                 “复制”得到的是 SSTP 连接参数，不是 v2rayN 的 VLESS 订阅。 在支持
                 SSTP 的客户端中，填写导出的服务器域名、检测通过的端口，
                 用户名和密码均为 vpn。保留域名以正常验证服务器证书。
               </p>
               <p>
-                也可交给支持 SSTP 的 Worker 使用，但需要该 Worker
-                的配置格式和自身实测。 保存参数后直接连接不经过本
-                VPS；节点可能失效，需要重新检测。
+                需要 v2rayN/3x-ui 时请使用“加入 VPS 出口池”。加入后客户端连接 VPS
+                的现有面板入口，VPS 再通过该 SSTP 出口转发；健康检查失败时流量会阻断，
+                不会回落到 VPS 直连。节点可能失效，系统会尝试重建同一 SSTP 出口。
               </p>
               <p style="margin-top: 12px">
                 <a
@@ -3082,7 +3084,8 @@
                 "</td><td>" +
                 esc(r.actual_ip || "—") +
                 '<small style="display:block">' +
-                esc(r.country ? country(r.country) : "实际国家待验证") +
+                esc(r.country ? country(r.country) : "实际国家待验证") + " · " +
+                esc(types[r.ip_type] || r.ip_type || "未知 / unknown") +
                 '</small></td><td><span class="badge ' +
                 (r.stale ? "stale" : r.status) +
                 '">' +
@@ -3115,6 +3118,15 @@
                     esc(n.hostname) +
                     '">' +
                     (previousValid ? "复制上次通过" : "复制") +
+                    "</button>"
+                  : "") +
+                (!r.stale && r.status === "passed"
+                  ? '<button class="primary" data-sstp-promote="' +
+                    esc(n.hostname) +
+                    '" ' +
+                    (n.promoted ? "disabled" : "") +
+                    ">" +
+                    (n.promoted ? "已加入出口池" : "加入 VPS 出口池") +
                     "</button>"
                   : "") +
                 "</div></td></tr>"
@@ -3299,6 +3311,16 @@
             () => resourceExport([copyButton.dataset.sstpCopy], "text", true),
             copyButton,
           );
+        const promote = e.target.closest("[data-sstp-promote]");
+        if (promote)
+          return action(async () => {
+            await api("api/resources/sstp/promote", {
+              hostname: promote.dataset.sstpPromote,
+            });
+            toast("已创建 VPS 持久 SSTP 出口；等待状态变为已就绪后即可在 3x-ui 选择");
+            await loadResourceSstp(true);
+            await poll();
+          }, promote);
         const toggle = e.target.closest("[data-resource-toggle]");
         if (toggle) {
           const row = exits.find(
@@ -3461,7 +3483,13 @@
           "出口 " + String(slot).padStart(2, "0") + " 设置";
         $("exitCountry").value = p.country || "";
         $("exitLatency").value = p.maximum_latency_ms || 0;
-        $("typeChoices").innerHTML = Object.entries(types)
+		const typeEntries = Object.entries(types).filter(([kind]) =>
+			currentExit.transport !== "sstp" ||
+			(currentExit.source_category === "new_residential"
+				? ["strict_residential", "likely_residential"].includes(kind)
+				: ["datacenter", "business_isp"].includes(kind)),
+		);
+        $("typeChoices").innerHTML = typeEntries
           .map(
             ([k, v]) =>
               '<label><input type="checkbox" name="ip_type" value="' +
@@ -3481,6 +3509,8 @@
         ])
           $(id).value = (p[key] || []).join(", ");
         $("rollbackPolicy").hidden = !currentExit.can_rollback_policy;
+		$("swapExit").disabled = currentExit.transport === "sstp";
+		$("swapExit").textContent = currentExit.transport === "sstp" ? "SSTP 固定端点" : "更换 IP";
         $("nameEdits").innerHTML =
           (currentExit.inbounds || [])
             .map(

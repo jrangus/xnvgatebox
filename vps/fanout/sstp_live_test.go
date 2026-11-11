@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,36 @@ import (
 	"time"
 )
 
+func liveSSTPCandidate(t *testing.T) (Node, string) {
+	t.Helper()
+	if candidatePath := os.Getenv("XNV_SSTP_CANDIDATE"); candidatePath != "" {
+		blob, err := os.ReadFile(candidatePath)
+		if err != nil {
+			t.Fatal("private candidate required")
+		}
+		var n Node
+		if json.Unmarshal(blob, &n) != nil || len(n.SSTPCandidates) == 0 {
+			t.Fatal("invalid candidate")
+		}
+		return n, filepath.Dir(candidatePath)
+	}
+	poolPath := os.Getenv("XNV_SSTP_POOL")
+	if poolPath == "" {
+		t.Fatal("XNV_SSTP_CANDIDATE or XNV_SSTP_POOL is required")
+	}
+	nodes, err := fetchNodesFromValidatedPool(poolPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range nodes {
+		if len(n.SSTPCandidates) > 0 {
+			return n, t.TempDir()
+		}
+	}
+	t.Fatal("validated pool has no SSTP candidate")
+	return Node{}, ""
+}
+
 // Explicit opt-in on a disposable instance. No installed manager, CF or panel
 // is opened. A private current official candidate is supplied by the operator.
 func TestLiveSstpIsolationAndRecovery(t *testing.T) {
@@ -22,14 +53,7 @@ func TestLiveSstpIsolationAndRecovery(t *testing.T) {
 	if err := sstpDependencies(); err != nil {
 		t.Fatal(err)
 	}
-	blob, err := os.ReadFile(os.Getenv("XNV_SSTP_CANDIDATE"))
-	if err != nil {
-		t.Fatal("private candidate required")
-	}
-	var n Node
-	if json.Unmarshal(blob, &n) != nil || len(n.SSTPCandidates) == 0 {
-		t.Fatal("invalid candidate")
-	}
+	n, _ := liveSSTPCandidate(t)
 	dir := t.TempDir()
 	oldTag, oldBase := instTag, instBase
 	defer func() { instTag, instBase = oldTag, oldBase }()
@@ -125,14 +149,7 @@ func TestLiveSstpEndToEnd(t *testing.T) {
 	if os.Getenv("XNV_SSTP_E2E") != "1" {
 		t.Skip("explicit real SSTP end-to-end candidate only")
 	}
-	blob, err := os.ReadFile(os.Getenv("XNV_SSTP_CANDIDATE"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var n Node
-	if json.Unmarshal(blob, &n) != nil {
-		t.Fatal("candidate")
-	}
+	n, evidenceDir := liveSSTPCandidate(t)
 	dir := t.TempDir()
 	oldTag, oldBase := instTag, instBase
 	defer func() { instTag, instBase = oldTag, oldBase }()
@@ -156,15 +173,40 @@ func TestLiveSstpEndToEnd(t *testing.T) {
 			logs, _ := filepath.Glob(filepath.Join(dir, ".connectivity-sstp-*", "sstp.log"))
 			for _, log := range logs {
 				if b, err := os.ReadFile(log); err == nil {
-					os.WriteFile(filepath.Join(filepath.Dir(os.Getenv("XNV_SSTP_CANDIDATE")), "sstp-client-private.log"), b, 0600)
+					os.WriteFile(filepath.Join(evidenceDir, "sstp-client-private.log"), b, 0600)
 				}
 			}
 		}
 	})
 	b, _ := json.Marshal(result)
-	os.WriteFile(filepath.Join(filepath.Dir(os.Getenv("XNV_SSTP_CANDIDATE")), "sstp-e2e-private.json"), b, 0600)
+	os.WriteFile(filepath.Join(evidenceDir, "sstp-e2e-private.json"), b, 0600)
 	if result.Status != "passed" {
 		t.Skipf("real upstream attempt: %s; no validated node claimed", result.Code)
 	}
-	t.Log("Real SSTP + PPP + two HTTPS echoes + HTTPS content passed")
+	tunnel, err := c.m.StartVerifiedSSTP(n, result)
+	if err != nil {
+		t.Skipf("real SSTP passed but is not eligible for residential/native promotion: %v", err)
+	}
+	deadline := time.Now().Add(90 * time.Second)
+	for time.Now().Before(deadline) && tunnel.snapshot().Status != "up" {
+		if status := tunnel.snapshot().Status; status == "failed" || status == "blocked" {
+			t.Fatalf("persistent SSTP did not become ready: %s", tunnel.snapshot().Err)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	view := tunnel.snapshot()
+	if view.Status != "up" || view.ExitIP != result.ActualIP || tunnel.sourceCategory() == exitSourceStable || tunnel.transport() != tunnelTransportSSTP {
+		t.Fatalf("persistent SSTP publication mismatch: %+v", view)
+	}
+	actual, _, err := tunnel.probeSocksExitIPWithLatency()
+	if err != nil || actual != result.ActualIP {
+		t.Fatalf("persistent local SOCKS did not retain SSTP exit: %s %v", actual, err)
+	}
+	if err := c.m.Stop(tunnel.Slot); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, fmt.Sprintf(".sstp-slot-%d", tunnel.Slot))); !os.IsNotExist(err) {
+		t.Fatal("persistent SSTP runtime files remain after stop")
+	}
+	t.Log("Real SSTP + PPP + local authenticated SOCKS promotion passed")
 }

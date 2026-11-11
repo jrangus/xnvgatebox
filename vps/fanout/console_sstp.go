@@ -317,6 +317,47 @@ func (s *SstpManager) routes(mux *http.ServeMux) {
 		writeJSON(w, 202, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("/api/resources/sstp/export", s.apiExport)
+	mux.HandleFunc("/api/resources/sstp/promote", s.apiPromote)
+}
+
+func (s *SstpManager) apiPromote(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var in struct {
+		Hostname string `json:"hostname"`
+	}
+	if err := readConsoleJSON(w, r, &in); err != nil || strings.TrimSpace(in.Hostname) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "请选择一个已通过检测的 SSTP 节点"})
+		return
+	}
+	nodes, _ := s.c.m.Nodes()
+	var node Node
+	found := false
+	for _, candidate := range nodes {
+		if candidate.HostName == in.Hostname {
+			node, found = candidate, true
+			break
+		}
+	}
+	if !found {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "节点已不在当前 SSTP 候选清单中"})
+		return
+	}
+	s.mu.Lock()
+	result, ok := s.state.Results[in.Hostname]
+	s.mu.Unlock()
+	if !ok {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "请先在 VPS 上完成 SSTP 检测"})
+		return
+	}
+	tunnel, err := s.c.m.StartVerifiedSSTP(node, result)
+	if err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "slot": tunnel.Slot, "status": tunnel.Status})
 }
 
 func (s *SstpManager) apiView(w http.ResponseWriter, r *http.Request) {
@@ -325,6 +366,13 @@ func (s *SstpManager) apiView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nodes, _ := s.c.m.Nodes()
+	promoted := map[string]bool{}
+	for _, tunnel := range s.c.m.Tunnels() {
+		snapshot := tunnel.snapshot()
+		if tunnel.transport() == tunnelTransportSSTP && snapshot.Status != "stopped" {
+			promoted[snapshot.Node.HostName] = true
+		}
+	}
 	s.mu.Lock()
 	settings, last := s.state.Settings, s.state.LastStarted
 	attempts := map[string]CheckResult{}
@@ -351,7 +399,7 @@ func (s *SstpManager) apiView(w http.ResponseWriter, r *http.Request) {
 		} else {
 			result = CheckResult{Host: n.HostName, Status: "not_tested", IPType: "unknown", CFStatus: "not_tested", ObservedBy: "vps"}
 		}
-		row := map[string]any{"hostname": n.HostName, "server_ip": n.IP, "source_country": n.CountryCode, "candidates": n.SSTPCandidates, "result": result}
+		row := map[string]any{"hostname": n.HostName, "server_ip": n.IP, "source_country": n.CountryCode, "candidates": n.SSTPCandidates, "result": result, "promoted": promoted[n.HostName]}
 		if attempt, ok := attempts[n.HostName]; ok && attempt.ProfileSHA == sstpProfile(n) {
 			if attempt.Status == "passed" || attempt.Status == "failed" {
 				attempt = freshSstpResult(n, attempt, time.Now())
