@@ -1098,6 +1098,7 @@
                 <p class="muted" style="margin: 8px 0 16px">
                   本机直出与自定义代理按启用和订阅设置输出；VPN Gate 仅输出已就绪入口。
                 </p>
+                <div id="integratedSubNotice" class="notice" hidden></div>
                 <textarea
                   id="subURL"
                   rows="3"
@@ -1144,7 +1145,7 @@
           <div class="pagehead">
             <div>
               <div class="eyebrow">DISCOVER & VERIFY</div>
-              <h1>候选节点</h1>
+              <h1>VPN Gate 候选（OpenVPN 出口）</h1>
               <p id="poolSummary">正在读取来源清单…</p>
             </div>
             <div class="actions">
@@ -1162,12 +1163,12 @@
                   aria-label="检测与建连并发数"
                   inputmode="numeric" /></label
               ><button id="saveCheckSettings">保存</button
-              ><button class="primary" id="testSelected">检测所选节点</button
-              ><button id="testAllNodes">检测全部候选</button>
+              ><button class="primary" id="testSelected">检测所选 OpenVPN 候选</button
+              ><button id="testAllNodes">检测全部 OpenVPN 候选</button>
             </div>
           </div>
           <div class="notice">
-            清单数量是本次来源返回并经格式校验的候选数量，可能随时间变化。未测试不等于不可用；来源地区与实际出口地区分开展示。检测会建立临时连接并核验
+            这里检测的是 OpenVPN 出口链路，用于 xnvgatebox 稳定池。它与“代理资源 → 原始 SSTP”的 SSTP/PPP 检测协议不同，不是重复检测。清单数量是本次来源返回并经格式校验的候选数量，可能随时间变化。未测试不等于不可用；来源地区与实际出口地区分开展示。检测会建立临时连接并核验
             HTTPS
             出口。快速端口预检不代表出口可用；无需测完全部候选才能使用订阅。
           </div>
@@ -1315,6 +1316,9 @@
               127.0.0.1 的 SOCKS5 出口；之后可像 xnvgatebox 稳定池一样在 3x-ui
               中生成 VLESS/VMess/Trojan 订阅。它仍归入“新增住宅”或“新增原生机房”，不会混入
               xnvgatebox 稳定池。CF 仍暂停，来源地区不代表实际出口国家。
+            </div>
+            <div class="notice">
+              本页执行 SSTP/PPP 检测，用于新增住宅池或新增原生机房池；“候选节点”页执行 OpenVPN 检测，用于 xnvgatebox 稳定池。两者可以读取同一份 VPN Gate 原始候选，但协议、验证证据和最终分类互不混用。
             </div>
             <details class="card pad" style="margin: 20px 0">
               <summary>直接 SSTP 与 VPS 出口有什么区别？</summary>
@@ -1558,8 +1562,8 @@
     <dialog id="sourceDialog" aria-labelledby="sourceTitle">
       <form id="sourceForm">
         <div class="dialoghead"><h2 id="sourceTitle">候选来源设置</h2><button type="button" data-close="sourceDialog" aria-label="关闭">×</button></div>
-        <p>所有清单获取和节点检测都由本 VPS 执行。先尝试当前配置来源；启用后，仅在失败时请求第三方镜像原始 CSV。</p>
-        <label class="choice"><input id="sourceMirrorEnabled" type="checkbox" />允许第三方镜像后备（默认开启，可关闭）</label>
+        <p>所有清单获取和节点检测都由本 VPS 执行。请选择候选获取策略；镜像只在官方来源失败时作为后备，不会与官方候选混合。</p>
+        <div class="field"><label for="sourcePolicy">候选获取来源</label><select id="sourcePolicy"><option value="official_only">仅 VPN Gate 官方来源</option><option value="official_then_mirror">官方优先，失败后使用第三方镜像</option></select></div>
         <p class="muted">镜像提供者：<a href="https://github.com/GeorgeXie2333/vpngate-list-mirror" target="_blank" rel="noopener noreferrer">GeorgeXie2333/vpngate-list-mirror</a>，非官方。只使用原始候选，不采用对方的检测结论；文件摘要不等于官方来源认证。</p>
         <div class="field"><label for="sourceTimeout">每次来源请求最长等待（秒）</label><input id="sourceTimeout" type="number" min="2" max="20" step="1" required /></div>
         <div class="field"><label for="sourceMirrorMaxAge">镜像声明抓取时间的最大年龄（小时）</label><input id="sourceMirrorMaxAge" type="number" min="1" max="168" step="1" required /><small>默认 24 小时；超过 3 小时会提示较旧。摘要、时间或格式校验失败时保留旧清单。节点仍需本 VPS 建连验证。</small></div>
@@ -1920,7 +1924,12 @@
         if (enabled.length === 1 && enabled[0].name_mode === "custom") {
           return enabled[0].remark;
         }
-        return country(verified(e)) + " · " + String(e.slot).padStart(2, "0");
+        return sourceCategoryLabel(e.source_category) + " · " + country(verified(e)) + " · " + String(e.slot).padStart(2, "0");
+      }
+      function sourceCategoryLabel(source) {
+        if (source === "new_residential") return "新增住宅";
+        if (source === "new_native_datacenter") return "新增原生机房";
+        return "xnvgatebox稳定";
       }
       function badge(status) {
         return (
@@ -2065,7 +2074,7 @@
                       ? country(code).split(" ").slice(1).join(" ")
                       : "地区未知",
                   ) +
-                  "</h2><small>VPN Gate · 出口 " +
+                  "</h2><small>" + esc(sourceCategoryLabel(e.source_category)) + " · " + esc(e.source_name || "来源未记录") + " · 出口 " +
                   String(e.slot).padStart(2, "0") +
                   "</small></div></div>" +
                   badge(e.status === "starting" && e.phase === "waiting_capacity" ? "queued" : e.status) +
@@ -2510,7 +2519,7 @@
           !selected.size || summary.check?.status === "running";
       }
       function selectedSubURL() {
-        if (!subscription.url) return "";
+        if (summary.backend !== "native" || !subscription.url) return "";
         const all = $("subAll").checked;
         const ids = exits
           .filter((e) => subSelected.has(e.slot))
@@ -2539,6 +2548,19 @@
         return u.href;
       }
       function renderSubscription() {
+        const integrated = summary.backend !== "native";
+        $("integratedSubNotice").hidden = !integrated;
+        $("integratedSubNotice").textContent = integrated
+          ? "当前由 3x-ui 接管。xnvgatebox 管理端仅监听 127.0.0.1，不提供可从电脑或手机访问的独立订阅；请在 3x-ui → Xray 设置 → 出口池中按来源创建并复制订阅组。"
+          : "";
+        if (integrated) {
+          $("subURL").value = "请在 3x-ui 出口池中复制订阅组地址";
+          $("copySub").disabled = true;
+          $("copyLinks").disabled = true;
+          $("subCount").textContent = "xnvgatebox 本机订阅已停用，避免复制无效的 127.0.0.1 地址。";
+          $("qr").hidden = true;
+          return;
+        }
         if (!subscription.url) return;
         const u = selectedSubURL();
         $("subURL").value = u;
@@ -3412,7 +3434,7 @@
         sourceSettingsLoading = true;
         try {
           const s = await api("api/console/source-settings");
-          $("sourceMirrorEnabled").checked = s.mirror_enabled === true;
+          $("sourcePolicy").value = s.mirror_enabled === true ? "official_then_mirror" : "official_only";
           $("sourceTimeout").value = s.source_timeout_seconds;
           $("sourceMirrorMaxAge").value = s.mirror_max_age_hours;
           $("sourceDialog").showModal();
@@ -3429,7 +3451,7 @@
           if (!Number.isSafeInteger(timeout) || timeout < 2 || timeout > 20 || !Number.isSafeInteger(age) || age < 1 || age > 168) throw Error("请填写有效的来源等待和镜像最大年龄");
           sourceSettingsSaving = true;
           try {
-            await api("api/console/source-settings", {mirror_enabled: $("sourceMirrorEnabled").checked, source_timeout_seconds: timeout, mirror_max_age_hours: age});
+            await api("api/console/source-settings", {mirror_enabled: $("sourcePolicy").value === "official_then_mirror", source_timeout_seconds: timeout, mirror_max_age_hours: age});
             $("sourceDialog").close();
             toast("来源设置已保存，下次刷新生效");
           } finally {

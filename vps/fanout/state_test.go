@@ -16,7 +16,7 @@ func TestSaveStateKeepsPrevHost(t *testing.T) {
 	m := NewManager(20, dir)
 	tn := &Tunnel{
 		Slot: 1, Port: 12345,
-		Node:   Node{HostName: "vpn-new", CountryCode: "JP"},
+		Node:   Node{HostName: "vpn-new", CountryCode: "JP", CandidateSourceKind: "official", CandidateSource: "VPN Gate 官方来源"},
 		Status: "starting",
 		Cred:   SocksCred{User: "u", Pass: "p"},
 	}
@@ -42,6 +42,9 @@ func TestSaveStateKeepsPrevHost(t *testing.T) {
 	}
 	if st.Tunnels[0].HostName != "vpn-new" {
 		t.Fatalf("当前节点应当是新的，实际 %q", st.Tunnels[0].HostName)
+	}
+	if st.Tunnels[0].CandidateSourceKind != "official" || st.Tunnels[0].CandidateSource != "VPN Gate 官方来源" {
+		t.Fatalf("候选来源没有持久化: %+v", st.Tunnels[0])
 	}
 }
 

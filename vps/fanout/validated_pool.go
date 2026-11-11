@@ -18,7 +18,8 @@ import (
 )
 
 type validatedPoolFile struct {
-	Nodes []validatedPoolNode `json:"nodes"`
+	Source poolSourceMetadata  `json:"source"`
+	Nodes  []validatedPoolNode `json:"nodes"`
 }
 
 type validatedPoolNode struct {
@@ -62,6 +63,7 @@ func fetchNodesFromValidatedPool(poolPath string) ([]Node, error) {
 		return nil, fmt.Errorf("解析 validated node pool 失败: %w", err)
 	}
 	base := filepath.Dir(poolPath)
+	poolSource := publicPoolSource(pool.Source)
 	var nodes []Node
 	for _, item := range pool.Nodes {
 		if strings.TrimSpace(item.Hostname) == "" || strings.TrimSpace(item.Protocols.OpenVPN.ProfileRef) == "" {
@@ -109,25 +111,27 @@ func fetchNodesFromValidatedPool(poolPath string) ([]Node, error) {
 			publicImage = &image
 		}
 		nodes = append(nodes, Node{
-			HostName:          item.Hostname,
-			IP:                item.ServerIP,
-			Country:           item.AdvertisedCountry,
-			CountryCode:       item.AdvertisedCountry,
-			Ping:              item.SourcePingMS,
-			SpeedMbps:         item.SourceScore,
-			Residential:       residential,
-			Config:            string(config),
-			PoolNodeID:        item.NodeID,
-			IPType:            ipType,
-			ISP:               isp,
-			ASN:               asn,
-			ExpectedExitIP:    expected,
-			OpenVPNEgress:     publicImage,
-			SSTPStatus:        item.Protocols.SSTP.Status,
-			SSTPCandidates:    append([]SstpEndpoint(nil), item.Protocols.SSTP.Candidates...),
-			OpenVPNStatus:     item.Protocols.OpenVPN.Status,
-			FullChainVerified: item.ModeA.Status == "passed",
-			LastVerified:      item.ModeA.VerifiedAt,
+			HostName:            item.Hostname,
+			IP:                  item.ServerIP,
+			Country:             item.AdvertisedCountry,
+			CountryCode:         item.AdvertisedCountry,
+			Ping:                item.SourcePingMS,
+			SpeedMbps:           item.SourceScore,
+			Residential:         residential,
+			Config:              string(config),
+			PoolNodeID:          item.NodeID,
+			IPType:              ipType,
+			ISP:                 isp,
+			ASN:                 asn,
+			ExpectedExitIP:      expected,
+			OpenVPNEgress:       publicImage,
+			SSTPStatus:          item.Protocols.SSTP.Status,
+			SSTPCandidates:      append([]SstpEndpoint(nil), item.Protocols.SSTP.Candidates...),
+			OpenVPNStatus:       item.Protocols.OpenVPN.Status,
+			FullChainVerified:   item.ModeA.Status == "passed",
+			LastVerified:        item.ModeA.VerifiedAt,
+			CandidateSourceKind: poolSource.Kind,
+			CandidateSource:     poolSource.Label,
 		})
 	}
 	if len(nodes) == 0 {

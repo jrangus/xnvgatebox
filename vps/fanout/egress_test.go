@@ -200,7 +200,10 @@ func TestValidatedPoolDoesNotBorrowSSTPImage(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "profile.ovpn"), []byte("client"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	pool := validatedPoolFile{Nodes: []validatedPoolNode{{Hostname: "candidate", AdvertisedCountry: "JP"}}}
+	pool := validatedPoolFile{
+		Source: poolSourceMetadata{Kind: "official", Retrieval: "local_builder"},
+		Nodes:  []validatedPoolNode{{Hostname: "candidate", AdvertisedCountry: "JP"}},
+	}
 	item := &pool.Nodes[0]
 	item.Protocols.OpenVPN.ProfileRef = "profile.ovpn"
 	item.Protocols.SSTP.Status = "passed"
@@ -222,6 +225,9 @@ func TestValidatedPoolDoesNotBorrowSSTPImage(t *testing.T) {
 		return nodes[0]
 	}
 	got := load()
+	if got.CandidateSourceKind != "official" || !strings.Contains(got.CandidateSource, "官方") {
+		t.Fatalf("candidate source attribution lost: %+v", got)
+	}
 	if got.IPType != "unknown" || got.ISP != "" || got.ASN != "" || got.ExpectedExitIP != "" || got.Residential {
 		t.Fatalf("SSTP leaked into OpenVPN candidate: %+v", got)
 	}
