@@ -78,7 +78,22 @@ func (s *SstpManager) persist() error {
 	return nil
 }
 
+// sstpProfile identifies the VPN Gate server itself. The candidate endpoint
+// list is intentionally excluded: it is refreshed independently and can be
+// reordered or gain another official port while a long batch probe is still
+// running. The measured port is validated separately by freshSstpResult and
+// validatedSSTPSource before the result can be exported or promoted.
 func sstpProfile(n Node) string {
+	blob, _ := json.Marshal(struct {
+		Host, IP string
+	}{n.HostName, n.IP})
+	return profileDigest(string(blob))
+}
+
+// legacySstpProfile accepts observations written by v0.9.10 only while the
+// exact old server profile still matches. New observations always use the
+// stable server-only profile above.
+func legacySstpProfile(n Node) string {
 	blob, _ := json.Marshal(struct {
 		Host, IP   string
 		Candidates []SstpEndpoint
@@ -86,9 +101,13 @@ func sstpProfile(n Node) string {
 	return profileDigest(string(blob))
 }
 
+func sstpProfileMatches(n Node, digest string) bool {
+	return digest != "" && (digest == sstpProfile(n) || digest == legacySstpProfile(n))
+}
+
 func freshSstpResult(n Node, r CheckResult, now time.Time) CheckResult {
 	r.Protocol = "sstp"
-	r.Stale = r.CheckedAt.After(now) || !r.ExpiresAt.After(r.CheckedAt) || r.ProfileSHA != sstpProfile(n) || r.CheckedAt.IsZero() || !r.ExpiresAt.After(now)
+	r.Stale = r.CheckedAt.After(now) || !r.ExpiresAt.After(r.CheckedAt) || !sstpProfileMatches(n, r.ProfileSHA) || r.CheckedAt.IsZero() || !r.ExpiresAt.After(now)
 	if r.Status == "passed" && (!sstpPublicIPv4(r.ActualIP) || r.ObservedBy != "vps" || r.Port < 1 || r.Port > 65535) {
 		r.Stale = true
 	}
@@ -400,7 +419,7 @@ func (s *SstpManager) apiView(w http.ResponseWriter, r *http.Request) {
 			result = CheckResult{Host: n.HostName, Status: "not_tested", IPType: "unknown", CFStatus: "not_tested", ObservedBy: "vps"}
 		}
 		row := map[string]any{"hostname": n.HostName, "server_ip": n.IP, "source_country": n.CountryCode, "candidates": n.SSTPCandidates, "result": result, "promoted": promoted[n.HostName]}
-		if attempt, ok := attempts[n.HostName]; ok && attempt.ProfileSHA == sstpProfile(n) {
+		if attempt, ok := attempts[n.HostName]; ok && sstpProfileMatches(n, attempt.ProfileSHA) {
 			if attempt.Status == "passed" || attempt.Status == "failed" {
 				attempt = freshSstpResult(n, attempt, time.Now())
 			}
