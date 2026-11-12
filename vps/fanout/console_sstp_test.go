@@ -103,6 +103,32 @@ func TestSstpViewKeepsDeferredAttemptAcrossJobsWithoutReplacingMeasuredEvidence(
 	}
 }
 
+func TestFreshSstpResultSurvivesCandidateRefreshWhenMeasuredEndpointRemains(t *testing.T) {
+	node, result := promotableSSTPFixture("strict_residential", "JP", "JP")
+	now := time.Now().UTC()
+	result.CheckedAt = now.Add(-time.Minute)
+	result.ExpiresAt = now.Add(time.Hour)
+	result.ProfileSHA = sstpProfile(node)
+
+	// VPN Gate refreshes can reorder the list and add another official port
+	// while a batch probe is running. The measured endpoint is still present,
+	// so this must not invalidate the just-finished observation.
+	node.SSTPCandidates = append([]SstpEndpoint{{Host: node.HostName, Port: 992}}, node.SSTPCandidates...)
+	got := freshSstpResult(node, result, now)
+	if got.Stale {
+		t.Fatal("candidate-list refresh invalidated a current SSTP observation")
+	}
+	if _, _, _, err := validatedSSTPSource(node, result, now); err != nil {
+		t.Fatalf("current measured endpoint could not be promoted after candidate refresh: %v", err)
+	}
+
+	// Replacing the measured port still invalidates the observation.
+	node.SSTPCandidates = []SstpEndpoint{{Host: node.HostName, Port: 992}}
+	if got := freshSstpResult(node, result, now); !got.Stale {
+		t.Fatal("removed measured endpoint remained current")
+	}
+}
+
 func TestSstpViewShowsCancelledQueueAfterNextJob(t *testing.T) {
 	s := sstpFixture(t)
 	s.state.Settings.Parallelism = 1
