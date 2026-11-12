@@ -1,4 +1,4 @@
-name: Dispatch tested v0.9.10 package once
+name: Publish tested v0.9.10 package once
 on:
   push:
     branches: [release-v0.9.10-source]
@@ -10,8 +10,8 @@ jobs:
   dispatch:
     runs-on: ubuntu-latest
     steps:
-      - name: Start corrected versioned VPS tests and package
+      - name: Publish the successful tested artifact
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh workflow run vps.yml --ref "${GITHUB_REF_NAME}" -f version=v0.9.10 -f live_mirror=false
+        run: gh workflow run release-vps.yml --ref main -f run_id=43124202899 -f tag=v0.9.10
