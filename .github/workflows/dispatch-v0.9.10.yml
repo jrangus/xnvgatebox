@@ -5,10 +5,10 @@ on:
     paths: ['.github/workflows/dispatch-v0.9.10.yml']
 permissions:
   actions: write
-  contents: read
+  contents: write
 jobs:
   dispatch:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Publish the successful tested artifact
         env:
