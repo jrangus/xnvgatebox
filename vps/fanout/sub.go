@@ -184,8 +184,9 @@ func subLinksSources(m *Manager, host string, boundOnly bool, selected map[int]b
 						label += fmt.Sprintf(" · %d", ib.Port)
 					}
 				}
-				if !strings.Contains(label, "VPN Gate") {
-					label += " · VPN Gate"
+				sourceLabel := subscriptionSourceLabel(e.SourceCategory)
+				if !strings.Contains(label, sourceLabel) {
+					label += " · " + sourceLabel
 				}
 				for _, link := range rows {
 					name := uniqueRemark(label, names)
@@ -319,17 +320,24 @@ func handleSub(m *Manager) http.HandlerFunc {
 			return
 		}
 
-		body:=[]byte(encodeSub(links,target))
-		if target=="clash" {
-			body,err=renderClash(links)
-			if err!=nil {http.Error(w,err.Error(),400);return}
-			w.Header().Set("Content-Type","application/yaml; charset=utf-8")
-		} else {w.Header().Set("Content-Type", "text/plain; charset=utf-8")}
+		body := []byte(encodeSub(links, target))
+		if target == "clash" {
+			body, err = renderClash(links)
+			if err != nil {
+				http.Error(w, err.Error(), 400)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+		} else {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		}
 		w.Header().Set("Cache-Control", "no-store")
 		// 客户端据此决定多久自动拉一次；出口增删之外的变化不影响链接，12 小时够
 		w.Header().Set("Profile-Update-Interval", "12")
 		w.Header().Set("Content-Disposition", "inline; filename=fanout")
-		if target=="clash" {w.Header().Set("Content-Disposition","inline; filename=xnvgatebox-clash.yaml")}
+		if target == "clash" {
+			w.Header().Set("Content-Disposition", "inline; filename=xnvgatebox-clash.yaml")
+		}
 		_, _ = w.Write(body)
 	}
 }

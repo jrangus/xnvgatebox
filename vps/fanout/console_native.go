@@ -134,5 +134,16 @@ func subscriptionExitName(e Exit) string {
 	if e.Status == "up" && e.Egress != nil && verifiedProfileCountry(*e.Egress) != "" {
 		country = countryLabel(stringValue(e.Egress.Country), stringValue(e.Egress.Country))
 	}
-	return fmt.Sprintf("%s · %02d", country, e.Slot)
+	return fmt.Sprintf("%s · %s · %02d", subscriptionSourceLabel(e.SourceCategory), country, e.Slot)
+}
+
+func subscriptionSourceLabel(source string) string {
+	switch source {
+	case exitSourceHome:
+		return "新增住宅 / VPN Gate SSTP"
+	case exitSourceNativeDC:
+		return "新增原生机房 / VPN Gate SSTP"
+	default:
+		return "xnvgatebox稳定 / VPN Gate OpenVPN"
+	}
 }

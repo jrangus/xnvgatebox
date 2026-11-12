@@ -251,7 +251,7 @@ func TestConsoleSubscriptionActualCountrySelectionCustomNames(t *testing.T) {
 		t.Fatal("selection failed", err, len(links))
 	}
 	u, _ := url.Parse(links[0])
-	if u.Fragment != "🇯🇵 日本 · 01 · VPN Gate" || u.User.String() != rollbackFixtureClientID {
+	if u.Fragment != "xnvgatebox稳定 / VPN Gate OpenVPN · 🇯🇵 日本 · 01" || u.User.String() != rollbackFixtureClientID {
 		t.Fatal("country/name or credentials incorrect", u.Fragment)
 	}
 	ibs, err := n.Inbounds(nil)
@@ -267,7 +267,7 @@ func TestConsoleSubscriptionActualCountrySelectionCustomNames(t *testing.T) {
 		t.Fatal("waiting slot leaked", err, len(links))
 	}
 	u, _ = url.Parse(links[1])
-	if u.Fragment != "自定义 🇰🇷 · VPN Gate" {
+	if u.Fragment != "自定义 🇰🇷 · xnvgatebox稳定 / VPN Gate OpenVPN" {
 		t.Fatal("custom name ignored")
 	}
 	ts[0].Status = "waiting"

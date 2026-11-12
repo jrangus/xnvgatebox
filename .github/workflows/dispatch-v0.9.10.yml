@@ -1,0 +1,17 @@
+name: Dispatch tested v0.9.10 package once
+on:
+  push:
+    branches: [release-v0.9.10-source]
+    paths: ['.github/workflows/dispatch-v0.9.10.yml']
+permissions:
+  actions: write
+  contents: read
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start corrected versioned VPS tests and package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run vps.yml --ref "${GITHUB_REF_NAME}" -f version=v0.9.10 -f live_mirror=false

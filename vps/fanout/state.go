@@ -12,19 +12,21 @@ import (
 // persistedTunnel 是隧道在磁盘上的形态。
 // 只存重建所需的信息，运行态（netns、进程、监听）重启后重新建立。
 type persistedTunnel struct {
-	Slot           int            `json:"slot"`
-	Port           int            `json:"port"`
-	HostName       string         `json:"hostname"`
-	CountryCode    string         `json:"country_code"`
-	Country        string         `json:"country"`
-	Config         string         `json:"config"`
-	ServerIP       string         `json:"server_ip,omitempty"`
-	SSTPCandidates []SstpEndpoint `json:"sstp_candidates,omitempty"`
-	Transport      string         `json:"transport,omitempty"`
-	SSTPPort       int            `json:"sstp_port,omitempty"`
-	SourceCategory string         `json:"source_category,omitempty"`
-	SourceName     string         `json:"source_name,omitempty"`
-	Native         bool           `json:"native,omitempty"`
+	Slot                int            `json:"slot"`
+	Port                int            `json:"port"`
+	HostName            string         `json:"hostname"`
+	CountryCode         string         `json:"country_code"`
+	Country             string         `json:"country"`
+	Config              string         `json:"config"`
+	ServerIP            string         `json:"server_ip,omitempty"`
+	SSTPCandidates      []SstpEndpoint `json:"sstp_candidates,omitempty"`
+	Transport           string         `json:"transport,omitempty"`
+	SSTPPort            int            `json:"sstp_port,omitempty"`
+	SourceCategory      string         `json:"source_category,omitempty"`
+	SourceName          string         `json:"source_name,omitempty"`
+	Native              bool           `json:"native,omitempty"`
+	CandidateSourceKind string         `json:"candidate_source_kind,omitempty"`
+	CandidateSource     string         `json:"candidate_source,omitempty"`
 	// SOCKS5 凭据要存盘：用户已经把它分发给客户端了，重启后变掉等于全断
 	SocksUser string `json:"socks_user,omitempty"`
 	SocksPass string `json:"socks_pass,omitempty"`
@@ -63,25 +65,27 @@ func (m *Manager) saveState() error {
 		// merely because they were waiting for a candidate at shutdown.
 		t.mu.Lock()
 		st.Tunnels = append(st.Tunnels, persistedTunnel{
-			Slot:           t.Slot,
-			Port:           t.Port,
-			HostName:       t.Node.HostName,
-			CountryCode:    t.Node.CountryCode,
-			Country:        t.Node.Country,
-			Config:         t.Node.Config,
-			ServerIP:       t.Node.IP,
-			SSTPCandidates: append([]SstpEndpoint(nil), t.Node.SSTPCandidates...),
-			Transport:      t.transport(),
-			SSTPPort:       t.SSTPPort,
-			SourceCategory: t.sourceCategory(),
-			SourceName:     t.SourceName,
-			Native:         t.Native,
-			SocksUser:      t.Cred.User,
-			SocksPass:      t.Cred.Pass,
-			PrevHost:       t.prevHost,
-			Policy:         t.Policy,
-			Stopped:        t.Status == "stopped",
-			PreviousPolicy: t.previousPolicy,
+			Slot:                t.Slot,
+			Port:                t.Port,
+			HostName:            t.Node.HostName,
+			CountryCode:         t.Node.CountryCode,
+			Country:             t.Node.Country,
+			Config:              t.Node.Config,
+			ServerIP:            t.Node.IP,
+			SSTPCandidates:      append([]SstpEndpoint(nil), t.Node.SSTPCandidates...),
+			Transport:           t.transport(),
+			SSTPPort:            t.SSTPPort,
+			SourceCategory:      t.sourceCategory(),
+			SourceName:          t.SourceName,
+			Native:              t.Native,
+			CandidateSourceKind: t.Node.CandidateSourceKind,
+			CandidateSource:     t.Node.CandidateSource,
+			SocksUser:           t.Cred.User,
+			SocksPass:           t.Cred.Pass,
+			PrevHost:            t.prevHost,
+			Policy:              t.Policy,
+			Stopped:             t.Status == "stopped",
+			PreviousPolicy:      t.previousPolicy,
 		})
 		t.mu.Unlock()
 	}
@@ -252,11 +256,13 @@ func prepareRestoredTunnels(st *persistedState, nodes []Node) ([]*Tunnel, error)
 			// 实测并持久化的 IP、证书主机名和端口；同名记录的新地址必须
 			// 重新检测，不能在重启恢复时悄悄替换安全边界。
 			node = Node{
-				HostName:       p.HostName,
-				CountryCode:    p.CountryCode,
-				Country:        p.Country,
-				IP:             p.ServerIP,
-				SSTPCandidates: append([]SstpEndpoint(nil), p.SSTPCandidates...),
+				HostName:            p.HostName,
+				CountryCode:         p.CountryCode,
+				Country:             p.Country,
+				IP:                  p.ServerIP,
+				SSTPCandidates:      append([]SstpEndpoint(nil), p.SSTPCandidates...),
+				CandidateSourceKind: p.CandidateSourceKind,
+				CandidateSource:     p.CandidateSource,
 			}
 		}
 		if p.Transport == tunnelTransportSSTP {

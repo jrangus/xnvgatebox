@@ -44,25 +44,27 @@ type SstpEndpoint struct {
 }
 
 type Node struct {
-	SSTPCandidates    []SstpEndpoint `json:"sstp_candidates,omitempty"`
-	PoolNodeID        string         `json:"pool_node_id,omitempty"`
-	HostName          string         `json:"hostname"`
-	IP                string         `json:"ip"`
-	Country           string         `json:"country"`
-	CountryCode       string         `json:"country_code"`
-	ASN               string         `json:"asn,omitempty"`
-	ISP               string         `json:"isp,omitempty"`
-	IPType            string         `json:"ip_type,omitempty"`
-	ExpectedExitIP    string         `json:"expected_exit_ip,omitempty"`
-	SSTPStatus        string         `json:"sstp_status,omitempty"`
-	OpenVPNStatus     string         `json:"openvpn_status,omitempty"`
-	FullChainVerified bool           `json:"full_chain_verified"`
-	LastVerified      string         `json:"last_verified,omitempty"`
-	OpenVPNEgress     *EgressProfile `json:"openvpn_egress,omitempty"`
-	Ping              int            `json:"ping"`
-	SpeedMbps         float64        `json:"speed_mbps"`
-	Sessions          int            `json:"sessions"`
-	Config            string         `json:"-"` // 解码后的 .ovpn 内容
+	SSTPCandidates      []SstpEndpoint `json:"sstp_candidates,omitempty"`
+	PoolNodeID          string         `json:"pool_node_id,omitempty"`
+	HostName            string         `json:"hostname"`
+	IP                  string         `json:"ip"`
+	Country             string         `json:"country"`
+	CountryCode         string         `json:"country_code"`
+	ASN                 string         `json:"asn,omitempty"`
+	ISP                 string         `json:"isp,omitempty"`
+	IPType              string         `json:"ip_type,omitempty"`
+	ExpectedExitIP      string         `json:"expected_exit_ip,omitempty"`
+	SSTPStatus          string         `json:"sstp_status,omitempty"`
+	OpenVPNStatus       string         `json:"openvpn_status,omitempty"`
+	FullChainVerified   bool           `json:"full_chain_verified"`
+	LastVerified        string         `json:"last_verified,omitempty"`
+	CandidateSourceKind string         `json:"candidate_source_kind,omitempty"`
+	CandidateSource     string         `json:"candidate_source,omitempty"`
+	OpenVPNEgress       *EgressProfile `json:"openvpn_egress,omitempty"`
+	Ping                int            `json:"ping"`
+	SpeedMbps           float64        `json:"speed_mbps"`
+	Sessions            int            `json:"sessions"`
+	Config              string         `json:"-"` // 解码后的 .ovpn 内容
 	// Residential 表示这是志愿者的家庭宽带，不是 VPN Gate 自己的机房服务器。
 	Residential bool `json:"residential"`
 }

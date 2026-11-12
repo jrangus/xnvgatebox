@@ -14,15 +14,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
-      - name: Publish the successful tested artifact
+      - name: Publish tested artifact after source alignment
         run: |
           set -euo pipefail
           gh workflow run release-vps.yml --ref main -f run_id=43124202899 -f tag=v0.9.10
-          RUN_ID=""
-          for attempt in $(seq 1 40); do
-            RUN_ID="$(gh run list --workflow release-vps.yml --event workflow_dispatch --limit 10 --json databaseId,createdAt --jq '.[0].databaseId // empty')"
-            [[ -n "$RUN_ID" ]] && break
-            sleep 5
-          done
-          [[ "$RUN_ID" =~ ^[0-9]+$ ]]
-          gh run watch "$RUN_ID" --exit-status

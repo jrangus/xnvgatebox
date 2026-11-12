@@ -143,7 +143,10 @@ func (m *Manager) ExitsOf() ExitsView {
 		cred := snapshot.Cred
 		sourceName := strings.TrimSpace(t.SourceName)
 		if sourceName == "" {
-			sourceName = "VPN Gate · xnvgatebox stable"
+			sourceName = strings.TrimSpace(snapshot.Node.CandidateSource)
+		}
+		if sourceName == "" {
+			sourceName = "VPN Gate 官方/既有候选 · xnvgatebox stable"
 		}
 		view.Exits = append(view.Exits, Exit{
 			Slot: snapshot.Slot, Port: snapshot.Port, Host: snapshot.Node.HostName,

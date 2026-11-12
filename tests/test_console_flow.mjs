@@ -80,7 +80,7 @@ sourceText = sourceTextContext.poolSourceText({kind:'mirror',label:'第三方镜
 assert.match(sourceText,/local-now/); assert.match(sourceText,/older-snapshot/); assert.match(sourceText,/快照较旧/);
 assert.match(sourceText,/文件完整性/); assert.match(sourceText,/本 VPS 建连/); assert.doesNotMatch(sourceText,/检测通过/);
 
-const sourceElements = Object.fromEntries(['sourceDialog','sourceMirrorEnabled','sourceTimeout','sourceMirrorMaxAge','sourceSettingsButton','sourceForm','saveSourceSettings'].map(id=>[id,{}]));
+const sourceElements = Object.fromEntries(['sourceDialog','sourcePolicy','sourceTimeout','sourceMirrorMaxAge','sourceSettingsButton','sourceForm','saveSourceSettings'].map(id=>[id,{}]));
 sourceElements.sourceDialog.showModal=function(){this.open=true;};
 sourceElements.sourceDialog.close=function(){this.open=false;};
 let sourceTask, savedSource, sourcePreference = false;
@@ -92,11 +92,11 @@ const sourceContext = vm.createContext({sourceSettingsLoading:false,sourceSettin
   }});
 vm.runInContext(section(html,'      async function openSourceSettings()', '      async function refreshPool()'),sourceContext);
 await sourceContext.openSourceSettings();
-assert.equal(sourceElements.sourceMirrorEnabled.checked,false,'saved disabled choice overwritten');
-sourceElements.sourceMirrorEnabled.checked=true;
+assert.equal(sourceElements.sourcePolicy.value,'official_only','saved official-only choice overwritten');
+sourceElements.sourcePolicy.value='official_then_mirror';
 sourceElements.sourceForm.onsubmit({preventDefault(){}});await sourceTask;
 assert.equal(savedSource.mirror_enabled,true); assert.equal(savedSource.source_timeout_seconds,10);
 assert.equal(savedSource.mirror_max_age_hours,24);assert.equal(Object.keys(savedSource).length,3,'unrelated settings submitted');
 sourcePreference = true;
 await sourceContext.openSourceSettings();
-assert.equal(sourceElements.sourceMirrorEnabled.checked,true,'server default not displayed');
+assert.equal(sourceElements.sourcePolicy.value,'official_then_mirror','server default not displayed');
