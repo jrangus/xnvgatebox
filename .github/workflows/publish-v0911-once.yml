@@ -1,0 +1,50 @@
+name: Publish v0.9.11 once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-v0911-once.yml
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Test, package, and publish v0.9.11
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run vps.yml --ref main -f version=v0.9.11 -f live_mirror=false
+
+          run_id=""
+          for _ in $(seq 1 30); do
+            run_id="$(gh run list --workflow vps.yml --event workflow_dispatch --branch main --limit 20 \
+              --json databaseId,headSha \
+              --jq '.[] | select(.headSha == env.GITHUB_SHA) | .databaseId' | head -n 1)"
+            [[ -n "$run_id" ]] && break
+            sleep 2
+          done
+          [[ "$run_id" =~ ^[0-9]+$ ]]
+          echo "VPS_RUN_ID=$run_id"
+          gh run watch "$run_id" --exit-status
+
+          gh workflow run release-vps.yml --ref main -f run_id="$run_id" -f tag=v0.9.11
+          release_id=""
+          for _ in $(seq 1 30); do
+            release_id="$(gh run list --workflow release-vps.yml --event workflow_dispatch --branch main --limit 20 \
+              --json databaseId,headSha \
+              --jq '.[] | select(.headSha == env.GITHUB_SHA) | .databaseId' | head -n 1)"
+            [[ -n "$release_id" ]] && break
+            sleep 2
+          done
+          [[ "$release_id" =~ ^[0-9]+$ ]]
+          echo "RELEASE_RUN_ID=$release_id"
+          gh run watch "$release_id" --exit-status
