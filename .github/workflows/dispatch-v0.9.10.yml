@@ -10,7 +10,7 @@ jobs:
   dispatch:
     runs-on: ubuntu-latest
     steps:
-      - name: Start versioned VPS tests and package
+      - name: Start corrected versioned VPS tests and package
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
