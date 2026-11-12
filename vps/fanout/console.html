@@ -2519,7 +2519,11 @@
           !selected.size || summary.check?.status === "running";
       }
       function selectedSubURL() {
-        if (summary.backend !== "native" || !subscription.url) return "";
+        if (
+          (typeof summary !== "undefined" && summary.backend !== "native") ||
+          !subscription.url
+        )
+          return "";
         const all = $("subAll").checked;
         const ids = exits
           .filter((e) => subSelected.has(e.slot))
