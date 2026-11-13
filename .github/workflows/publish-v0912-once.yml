@@ -36,7 +36,8 @@ jobs:
           (
             cd vps/fanout
             gofmt -w sstp_probe.go sstp_exit.go console_sstp.go console_sstp_test.go sstp_exit_test.go
-            go test ./...
+            go test -c -o /tmp/xnvgatebox-v0912-tests
+            sudo /tmp/xnvgatebox-v0912-tests
           )
           git diff --check
           git config user.name github-actions[bot]
