@@ -3122,6 +3122,7 @@
                 '</span><small style="display:block">' +
                 esc(sstpPhases[r.phase] || sstpCodes[r.code] || "") +
                 (previousValid ? " · 上次通过结果仍有效" : "") +
+                (n.promotion_error ? " · " + esc(n.promotion_error) : "") +
                 "</small></td><td>" +
                 esc(r.latency_ms ? Math.round(r.latency_ms) + " ms" : "—") +
                 "</td><td><small>" +
@@ -3149,10 +3150,16 @@
                 (!r.stale && r.status === "passed"
                   ? '<button class="primary" data-sstp-promote="' +
                     esc(n.hostname) +
+                    '" title="' +
+                    esc(n.promotion_error || "") +
                     '" ' +
-                    (n.promoted ? "disabled" : "") +
+                    (n.promoted || !n.promotable ? "disabled" : "") +
                     ">" +
-                    (n.promoted ? "已加入出口池" : "加入 VPS 出口池") +
+                    (n.promoted
+                      ? "已加入出口池"
+                      : n.promotable
+                        ? "加入 VPS 出口池"
+                        : "暂不可加入") +
                     "</button>"
                   : "") +
                 "</div></td></tr>"

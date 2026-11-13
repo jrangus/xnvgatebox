@@ -28,33 +28,62 @@ func sstpObservation(n Node) CheckResult {
 }
 
 func sstpRows(t *testing.T, s *SstpManager) map[string]struct {
-	Result  CheckResult  `json:"result"`
-	Attempt *CheckResult `json:"attempt"`
+	Result         CheckResult  `json:"result"`
+	Attempt        *CheckResult `json:"attempt"`
+	Promotable     bool         `json:"promotable"`
+	PromotionError string       `json:"promotion_error"`
 } {
 	t.Helper()
 	w := httptest.NewRecorder()
 	s.apiView(w, httptest.NewRequest("GET", "/api/resources/sstp", nil))
 	var v struct {
 		Nodes []struct {
-			Host    string       `json:"hostname"`
-			Result  CheckResult  `json:"result"`
-			Attempt *CheckResult `json:"attempt"`
+			Host           string       `json:"hostname"`
+			Result         CheckResult  `json:"result"`
+			Attempt        *CheckResult `json:"attempt"`
+			Promotable     bool         `json:"promotable"`
+			PromotionError string       `json:"promotion_error"`
 		} `json:"nodes"`
 	}
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &v) != nil {
 		t.Fatal("invalid resource response")
 	}
 	out := map[string]struct {
-		Result  CheckResult  `json:"result"`
-		Attempt *CheckResult `json:"attempt"`
+		Result         CheckResult  `json:"result"`
+		Attempt        *CheckResult `json:"attempt"`
+		Promotable     bool         `json:"promotable"`
+		PromotionError string       `json:"promotion_error"`
 	}{}
 	for _, n := range v.Nodes {
 		out[n.Host] = struct {
-			Result  CheckResult  `json:"result"`
-			Attempt *CheckResult `json:"attempt"`
-		}{n.Result, n.Attempt}
+			Result         CheckResult  `json:"result"`
+			Attempt        *CheckResult `json:"attempt"`
+			Promotable     bool         `json:"promotable"`
+			PromotionError string       `json:"promotion_error"`
+		}{n.Result, n.Attempt, n.Promotable, n.PromotionError}
 	}
 	return out
+}
+
+func TestSstpViewSeparatesConnectivityFromPromotionEligibility(t *testing.T) {
+	s := sstpFixture(t)
+	n := s.c.m.nodes[0]
+	result := sstpObservation(n)
+	result.Egress = &EgressProfile{IP: result.ActualIP, Protocol: tunnelTransportSSTP, IPType: "unknown", IntelligenceStatus: "not_configured"}
+	s.state.Results[n.HostName] = result
+	row := sstpRows(t, s)[n.HostName]
+	if row.Result.Status != "passed" || row.Promotable || !strings.Contains(row.PromotionError, "未配置 IP 类型画像服务") {
+		t.Fatalf("view did not expose the real promotion blocker: %+v", row)
+	}
+
+	_, classified := promotableSSTPFixture("strict_residential", "JP", "JP")
+	classified.Host = n.HostName
+	classified.ProfileSHA = sstpProfile(n)
+	s.state.Results[n.HostName] = classified
+	row = sstpRows(t, s)[n.HostName]
+	if !row.Promotable || row.PromotionError != "" {
+		t.Fatalf("classified SSTP was not marked promotable: %+v", row)
+	}
 }
 
 func TestSstpViewKeepsDeferredAttemptAcrossJobsWithoutReplacingMeasuredEvidence(t *testing.T) {

@@ -260,12 +260,14 @@ func (s *SstpManager) probeEndpoint(ctx context.Context, n Node, e SstpEndpoint,
 	r.Status, r.Code, r.ActualIP, r.LatencyMS = "passed", "", ip, latency
 	progress("profile")
 	image := lookupSstpEgress(ctx, s.c.m.workDir, ip)
-	if image.IntelligenceStatus == "passed" {
-		r.Country = stringValue(image.Country)
-		r.IPType = image.IPType
-		image.Raw = nil
-		r.Egress = &image
-	}
+	// Keep the profiling outcome even when the optional intelligence provider is
+	// not configured or temporarily unavailable.  Connectivity and promotion
+	// eligibility are different facts: the former remains a valid SSTP result,
+	// while the latter must explain why this exit cannot yet be classified.
+	r.Country = stringValue(image.Country)
+	r.IPType = image.IPType
+	image.Raw = nil
+	r.Egress = &image
 	return r
 }
 

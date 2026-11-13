@@ -419,6 +419,12 @@ func (s *SstpManager) apiView(w http.ResponseWriter, r *http.Request) {
 			result = CheckResult{Host: n.HostName, Status: "not_tested", IPType: "unknown", CFStatus: "not_tested", ObservedBy: "vps"}
 		}
 		row := map[string]any{"hostname": n.HostName, "server_ip": n.IP, "source_country": n.CountryCode, "candidates": n.SSTPCandidates, "result": result, "promoted": promoted[n.HostName]}
+		if _, _, _, err := validatedSSTPSource(n, result, time.Now().UTC()); err == nil {
+			row["promotable"] = true
+		} else if result.Status == "passed" && !result.Stale {
+			row["promotable"] = false
+			row["promotion_error"] = err.Error()
+		}
 		if attempt, ok := attempts[n.HostName]; ok && sstpProfileMatches(n, attempt.ProfileSHA) {
 			if attempt.Status == "passed" || attempt.Status == "failed" {
 				attempt = freshSstpResult(n, attempt, time.Now())

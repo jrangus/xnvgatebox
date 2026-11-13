@@ -92,3 +92,17 @@ func TestValidatedSSTPSourceRejectsExpiredIntelligence(t *testing.T) {
 		t.Fatal("expired SSTP intelligence was promoted")
 	}
 }
+
+func TestValidatedSSTPSourceExplainsMissingIntelligence(t *testing.T) {
+	node, result := promotableSSTPFixture("unknown", "JP", "JP")
+	result.Egress = nil
+	_, _, _, err := validatedSSTPSource(node, result, time.Now().UTC())
+	if err == nil || err.Error() == "SSTP 实测结果已失效，请重新检测" {
+		t.Fatalf("missing intelligence was incorrectly reported as stale: %v", err)
+	}
+	result.Egress = &EgressProfile{IP: result.ActualIP, Protocol: tunnelTransportSSTP, IPType: "unknown", IntelligenceStatus: "not_configured"}
+	_, _, _, err = validatedSSTPSource(node, result, time.Now().UTC())
+	if err == nil || err.Error() == "SSTP 实测结果已失效，请重新检测" {
+		t.Fatalf("unconfigured intelligence was incorrectly reported as stale: %v", err)
+	}
+}
