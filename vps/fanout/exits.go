@@ -7,10 +7,20 @@ import (
 )
 
 const (
-	exitSourceStable   = "xnvgatebox_stable"
-	exitSourceHome     = "new_residential"
-	exitSourceNativeDC = "new_native_datacenter"
+	exitSourceStable         = "xnvgatebox_stable"
+	exitSourceSSTP           = "sstp_pool"
+	exitSourceLegacyHome     = "new_residential"
+	exitSourceLegacyNativeDC = "new_native_datacenter"
 )
+
+func normalizedExitSource(source string) string {
+	switch source {
+	case exitSourceSSTP, exitSourceLegacyHome, exitSourceLegacyNativeDC:
+		return exitSourceSSTP
+	default:
+		return exitSourceStable
+	}
+}
 
 // ExitInbound 是挂在某个出口上的一个受管入站。
 type ExitInbound struct {

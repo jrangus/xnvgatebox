@@ -131,7 +131,7 @@ func normalizeSupplementalEntry(entry supplementalEntry, manifest supplementalMa
 		return Exit{}, errors.New("SOCKS credentials must be both empty or both present")
 	}
 	entry.Country = strings.ToUpper(strings.TrimSpace(entry.Country))
-	if len(entry.Country) != 2 || entry.Country[0] < 'A' || entry.Country[0] > 'Z' || entry.Country[1] < 'A' || entry.Country[1] > 'Z' {
+	if entry.Country != "" && (len(entry.Country) != 2 || entry.Country[0] < 'A' || entry.Country[0] > 'Z' || entry.Country[1] < 'A' || entry.Country[1] > 'Z') {
 		return Exit{}, errors.New("country must be an ISO alpha-2 code")
 	}
 	if entry.CheckedAt.IsZero() || entry.ExpiresAt.IsZero() || entry.CheckedAt.After(now.Add(5*time.Minute)) ||
@@ -139,28 +139,17 @@ func normalizeSupplementalEntry(entry supplementalEntry, manifest supplementalMa
 		entry.ExpiresAt.After(manifest.ExpiresAt) || !entry.ExpiresAt.After(entry.CheckedAt) {
 		return Exit{}, errors.New("probe evidence is stale or inconsistent")
 	}
-	switch entry.SourceCategory {
-	case exitSourceHome:
-		if entry.Native || (entry.IPType != "strict_residential" && entry.IPType != "likely_residential") {
-			return Exit{}, errors.New("new residential exit lacks residential evidence")
-		}
-	case exitSourceNativeDC:
-		if !entry.Native || (entry.IPType != "datacenter" && entry.IPType != "business_isp") {
-			return Exit{}, errors.New("new native datacenter exit lacks native datacenter evidence")
-		}
-	default:
+	entry.SourceCategory = normalizedExitSource(entry.SourceCategory)
+	if entry.SourceCategory != exitSourceSSTP {
 		return Exit{}, errors.New("source category is not allowed in the supplemental pool")
 	}
 	country, city := entry.Country, strings.TrimSpace(entry.City)
-	residential := entry.SourceCategory == exitSourceHome
-	hosting := entry.SourceCategory == exitSourceNativeDC
 	profile := &EgressProfile{
 		IP: exitIP, Protocol: "socks5", Country: &country, City: &city,
-		IPType: entry.IPType, Residential: &residential, Hosting: &hosting,
-		Confidence: "verified", Provider: entry.SourceName,
+		IPType: "unknown", Confidence: "unknown", Provider: entry.SourceName,
 		QueriedAt:          entry.CheckedAt.UTC().Format(time.RFC3339Nano),
 		ExpiresAt:          entry.ExpiresAt.UTC().Format(time.RFC3339Nano),
-		IntelligenceStatus: "passed",
+		IntelligenceStatus: "not_configured",
 	}
 	return Exit{
 		Slot: entry.Slot, Host: proxyIP, Region: country, Country: country,

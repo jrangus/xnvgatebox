@@ -22,24 +22,16 @@ func promotableSSTPFixture(kind, actualCountry, sourceCountry string) (Node, Che
 	return node, result
 }
 
-func TestValidatedSSTPSourceKeepsOptionalCategoriesSeparate(t *testing.T) {
+func TestValidatedSSTPSourceUsesUnclassifiedSSTPPool(t *testing.T) {
 	node, result := promotableSSTPFixture("likely_residential", "US", "JP")
 	source, native, policy, err := validatedSSTPSource(node, result, time.Now().UTC())
-	if err != nil || source != exitSourceHome || native || policy.Country != "US" || len(policy.AllowedIPTypes) != 1 {
-		t.Fatalf("residential promotion classification wrong: %q %v %+v %v", source, native, policy, err)
+	if err != nil || source != exitSourceSSTP || native || policy.Country != "" || len(policy.AllowedIPTypes) != 1 || policy.AllowedIPTypes[0] != "unknown" {
+		t.Fatalf("SSTP promotion category wrong: %q %v %+v %v", source, native, policy, err)
 	}
-	node, result = promotableSSTPFixture("datacenter", "JP", "JP")
-	source, native, _, err = validatedSSTPSource(node, result, time.Now().UTC())
-	if err != nil || source != exitSourceNativeDC || !native {
-		t.Fatalf("native datacenter promotion classification wrong: %q %v %v", source, native, err)
-	}
-	node, result = promotableSSTPFixture("datacenter", "US", "JP")
-	if _, _, _, err = validatedSSTPSource(node, result, time.Now().UTC()); err == nil {
-		t.Fatal("non-native datacenter SSTP was promoted")
-	}
-	node, result = promotableSSTPFixture("unknown", "JP", "JP")
-	if _, _, _, err = validatedSSTPSource(node, result, time.Now().UTC()); err == nil {
-		t.Fatal("unknown SSTP was promoted")
+	result.Egress = nil
+	result.IPType = "unknown"
+	if _, _, _, err = validatedSSTPSource(node, result, time.Now().UTC()); err != nil {
+		t.Fatalf("unclassified measured SSTP was not promotable: %v", err)
 	}
 	result.ExpiresAt = time.Now().Add(-time.Minute)
 	if _, _, _, err = validatedSSTPSource(node, result, time.Now().UTC()); err == nil {
@@ -52,7 +44,7 @@ func TestPersistentSSTPStateIsStrictAndBackwardCompatible(t *testing.T) {
 	state := persistedState{Tunnels: []persistedTunnel{{
 		Slot: 2, Port: 17929, HostName: node.HostName, CountryCode: node.CountryCode, ServerIP: node.IP,
 		SSTPCandidates: node.SSTPCandidates, Transport: tunnelTransportSSTP, SSTPPort: result.Port,
-		SourceCategory: exitSourceHome, SocksUser: "user1234", SocksPass: "password1234",
+		SourceCategory: exitSourceLegacyHome, SocksUser: "user1234", SocksPass: "password1234",
 		Policy: &SlotPolicy{Country: "JP", AllowedIPTypes: []string{"strict_residential"}},
 	}}}
 	blob, _ := json.Marshal(state)
@@ -61,7 +53,7 @@ func TestPersistentSSTPStateIsStrictAndBackwardCompatible(t *testing.T) {
 		t.Fatal(err)
 	}
 	tunnels, err := prepareRestoredTunnels(decoded, nil)
-	if err != nil || len(tunnels) != 1 || tunnels[0].transport() != tunnelTransportSSTP || tunnels[0].sourceCategory() != exitSourceHome || tunnels[0].SSTPPort != 443 {
+	if err != nil || len(tunnels) != 1 || tunnels[0].transport() != tunnelTransportSSTP || tunnels[0].sourceCategory() != exitSourceSSTP || tunnels[0].SSTPPort != 443 || tunnels[0].Policy.AllowedIPTypes[0] != "unknown" {
 		t.Fatalf("SSTP state restore wrong: %+v %v", tunnels, err)
 	}
 	// A current pool row with the same hostname but another address must not
@@ -85,24 +77,19 @@ func TestPersistentSSTPStateIsStrictAndBackwardCompatible(t *testing.T) {
 	}
 }
 
-func TestValidatedSSTPSourceRejectsExpiredIntelligence(t *testing.T) {
+func TestValidatedSSTPSourceRejectsExpiredObservation(t *testing.T) {
 	node, result := promotableSSTPFixture("strict_residential", "JP", "JP")
-	result.Egress.ExpiresAt = time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano)
+	result.ExpiresAt = time.Now().UTC().Add(-time.Minute)
 	if _, _, _, err := validatedSSTPSource(node, result, time.Now().UTC()); err == nil {
-		t.Fatal("expired SSTP intelligence was promoted")
+		t.Fatal("expired SSTP observation was promoted")
 	}
 }
 
-func TestValidatedSSTPSourceExplainsMissingIntelligence(t *testing.T) {
+func TestValidatedSSTPSourceDoesNotRequireIntelligence(t *testing.T) {
 	node, result := promotableSSTPFixture("unknown", "JP", "JP")
 	result.Egress = nil
 	_, _, _, err := validatedSSTPSource(node, result, time.Now().UTC())
-	if err == nil || err.Error() == "SSTP 实测结果已失效，请重新检测" {
-		t.Fatalf("missing intelligence was incorrectly reported as stale: %v", err)
-	}
-	result.Egress = &EgressProfile{IP: result.ActualIP, Protocol: tunnelTransportSSTP, IPType: "unknown", IntelligenceStatus: "not_configured"}
-	_, _, _, err = validatedSSTPSource(node, result, time.Now().UTC())
-	if err == nil || err.Error() == "SSTP 实测结果已失效，请重新检测" {
-		t.Fatalf("unconfigured intelligence was incorrectly reported as stale: %v", err)
+	if err != nil {
+		t.Fatalf("missing intelligence blocked a measured SSTP exit: %v", err)
 	}
 }

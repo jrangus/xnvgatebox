@@ -384,9 +384,11 @@ func (m *Manager) tryNode(t *Tunnel) error {
 	t.ExitIP = ip
 	t.mu.Unlock()
 	t.probePhase("profile")
-	image := lookupOpenVPNEgressContext(t.workContext(), m.evidenceDir, ip)
+	var image EgressProfile
 	if t.transport() == tunnelTransportSSTP {
-		image = lookupSstpEgress(t.workContext(), m.evidenceDir, ip)
+		image = EgressProfile{IP: ip, Protocol: tunnelTransportSSTP, IPType: "unknown", Reason: "sstp_pool_unclassified", Confidence: "unknown", IntelligenceStatus: "not_configured"}
+	} else {
+		image = lookupOpenVPNEgressContext(t.workContext(), m.evidenceDir, ip)
 	}
 	if !m.tunnelActive(t) {
 		return fmt.Errorf("画像查询期间 Slot 已停止")

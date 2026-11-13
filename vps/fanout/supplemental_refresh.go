@@ -247,19 +247,7 @@ func (s *SupplementalManager) refresh(ctx context.Context) (int, error) {
 	manifest := supplementalManifest{SchemaVersion: 1, GeneratedAt: time.Now().UTC(), ExpiresAt: time.Now().UTC().Add(45 * time.Minute)}
 	for item := range results {
 		r := item.record
-		if r.Status != "passed" || !r.ExpiresAt.After(time.Now()) || r.Country == "" {
-			continue
-		}
-		category := ""
-		switch r.IPType {
-		case "strict_residential", "likely_residential":
-			category = exitSourceHome
-		case "datacenter", "business_isp":
-			if r.Native {
-				category = exitSourceNativeDC
-			}
-		}
-		if category == "" {
+		if r.Status != "passed" || !r.ExpiresAt.After(time.Now()) {
 			continue
 		}
 		expiry := r.ExpiresAt
@@ -267,10 +255,10 @@ func (s *SupplementalManager) refresh(ctx context.Context) (int, error) {
 			expiry = manifest.ExpiresAt
 		}
 		manifest.Entries = append(manifest.Entries, supplementalEntry{
-			SourceName: item.candidate.Source, SourceCategory: category,
+			SourceName: item.candidate.Source, SourceCategory: exitSourceSSTP,
 			Host: item.candidate.Host, Port: item.candidate.Port,
-			Country: r.Country, City: r.City, ExitIP: r.ActualIP, IPType: r.IPType,
-			Native: r.Native, LatencyMS: r.LatencyMS, CheckedAt: r.CheckedAt.UTC(), ExpiresAt: expiry.UTC(),
+			Country: r.Country, City: r.City, ExitIP: r.ActualIP, IPType: "unknown",
+			Native: false, LatencyMS: r.LatencyMS, CheckedAt: r.CheckedAt.UTC(), ExpiresAt: expiry.UTC(),
 		})
 	}
 	if ctx.Err() != nil {

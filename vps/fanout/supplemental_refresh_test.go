@@ -62,7 +62,7 @@ func TestSupplementalRefreshPreservesPreviousPoolWhenNoCandidatePasses(t *testin
 	}
 }
 
-func TestSupplementalRefreshWritesOnlyVerifiedCategories(t *testing.T) {
+func TestSupplementalRefreshWritesAllVerifiedConnectivityToSSTPPool(t *testing.T) {
 	dir := t.TempDir()
 	c := &Console{m: NewManager(32, dir)}
 	s := newSupplementalManager(c)
@@ -84,15 +84,17 @@ func TestSupplementalRefreshWritesOnlyVerifiedCategories(t *testing.T) {
 		return ThirdPartyRecord{Status: "passed", ActualIP: p.Host, Country: "US", IPType: typeName, Native: native, CheckedAt: time.Now(), ExpiresAt: time.Now().Add(30 * time.Minute)}
 	}
 	kept, err := s.refresh(context.Background())
-	if err != nil || kept != 2 {
+	if err != nil || kept != 3 {
 		t.Fatalf("refresh kept=%d err=%v", kept, err)
 	}
 	exits, err := loadSupplementalExits(dir)
-	if err != nil || len(exits) != 2 {
+	if err != nil || len(exits) != 3 {
 		t.Fatalf("load exits=%+v err=%v", exits, err)
 	}
-	if exits[0].SourceCategory == exitSourceStable || exits[1].SourceCategory == exitSourceStable {
-		t.Fatal("supplemental refresh injected stable category")
+	for _, exit := range exits {
+		if exit.SourceCategory != exitSourceSSTP || exit.Egress == nil || exit.Egress.IPType != "unknown" {
+			t.Fatalf("supplemental exit was not normalized to the unclassified SSTP pool: %+v", exit)
+		}
 	}
 }
 

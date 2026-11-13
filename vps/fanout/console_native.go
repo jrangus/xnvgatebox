@@ -139,10 +139,8 @@ func subscriptionExitName(e Exit) string {
 
 func subscriptionSourceLabel(source string) string {
 	switch source {
-	case exitSourceHome:
-		return "新增住宅 / VPN Gate SSTP"
-	case exitSourceNativeDC:
-		return "新增原生机房 / VPN Gate SSTP"
+	case exitSourceSSTP, exitSourceLegacyHome, exitSourceLegacyNativeDC:
+		return "SSTP 出口池"
 	default:
 		return "xnvgatebox稳定 / VPN Gate OpenVPN"
 	}

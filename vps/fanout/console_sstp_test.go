@@ -65,24 +65,14 @@ func sstpRows(t *testing.T, s *SstpManager) map[string]struct {
 	return out
 }
 
-func TestSstpViewSeparatesConnectivityFromPromotionEligibility(t *testing.T) {
+func TestSstpViewPromotesMeasuredExitWithoutIntelligence(t *testing.T) {
 	s := sstpFixture(t)
 	n := s.c.m.nodes[0]
 	result := sstpObservation(n)
-	result.Egress = &EgressProfile{IP: result.ActualIP, Protocol: tunnelTransportSSTP, IPType: "unknown", IntelligenceStatus: "not_configured"}
 	s.state.Results[n.HostName] = result
 	row := sstpRows(t, s)[n.HostName]
-	if row.Result.Status != "passed" || row.Promotable || !strings.Contains(row.PromotionError, "未配置 IP 类型画像服务") {
-		t.Fatalf("view did not expose the real promotion blocker: %+v", row)
-	}
-
-	_, classified := promotableSSTPFixture("strict_residential", "JP", "JP")
-	classified.Host = n.HostName
-	classified.ProfileSHA = sstpProfile(n)
-	s.state.Results[n.HostName] = classified
-	row = sstpRows(t, s)[n.HostName]
 	if !row.Promotable || row.PromotionError != "" {
-		t.Fatalf("classified SSTP was not marked promotable: %+v", row)
+		t.Fatalf("measured SSTP was not marked promotable: %+v", row)
 	}
 }
 

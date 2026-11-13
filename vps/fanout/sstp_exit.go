@@ -64,7 +64,7 @@ func (m *Manager) StartVerifiedSSTP(node Node, result CheckResult) (*Tunnel, err
 	t := &Tunnel{
 		Slot: slot, Port: port, Node: node, Status: "starting", Since: time.Now(), Cred: cred, Policy: &policy,
 		Transport: tunnelTransportSSTP, SSTPPort: result.Port, SourceCategory: source,
-		SourceName: "VPN Gate SSTP · VPS 持久出口", Native: native,
+		SourceName: "SSTP · VPS 持久出口", Native: native,
 	}
 	t.resetWork()
 	m.tunnels[slot] = t
@@ -96,42 +96,15 @@ func validatedSSTPSource(node Node, result CheckResult, now time.Time) (string, 
 	if !endpointOK {
 		return "", false, SlotPolicy{}, fmt.Errorf("SSTP 端点已不在当前官方候选中")
 	}
-	if result.Egress == nil {
-		return "", false, SlotPolicy{}, fmt.Errorf("SSTP 连通性已通过，但缺少 IP 类型画像；请配置可信画像服务后重新检测")
-	}
-	image := *result.Egress
-	if image.IntelligenceStatus == "not_configured" {
-		return "", false, SlotPolicy{}, fmt.Errorf("SSTP 连通性已通过，但未配置 IP 类型画像服务，无法安全归类为住宅或原生机房")
-	}
-	if image.IntelligenceStatus != "passed" {
-		return "", false, SlotPolicy{}, fmt.Errorf("SSTP 连通性已通过，但 IP 类型画像查询失败；请检查画像服务后重新检测")
-	}
-	queriedAt, queriedErr := time.Parse(time.RFC3339Nano, image.QueriedAt)
-	expiresAt, expiresErr := time.Parse(time.RFC3339Nano, image.ExpiresAt)
-	if image.Protocol != tunnelTransportSSTP || image.IP != result.ActualIP ||
-		image.Provider == "" || image.RuleVersion == "" ||
-		queriedErr != nil || expiresErr != nil || queriedAt.After(now) || !expiresAt.After(queriedAt) || !expiresAt.After(now) {
-		return "", false, SlotPolicy{}, fmt.Errorf("SSTP 出口画像不完整")
-	}
-	actualCountry := verifiedProfileCountry(image)
-	source := ""
-	native := actualCountry != "" && strings.EqualFold(actualCountry, node.CountryCode)
-	switch image.IPType {
-	case "strict_residential", "likely_residential":
-		source = exitSourceHome
-	case "datacenter", "business_isp":
-		if !native {
-			return "", false, SlotPolicy{}, fmt.Errorf("机房出口的实测国家与来源国家不一致，不能标记为新增原生机房")
-		}
-		source = exitSourceNativeDC
-	default:
-		return "", false, SlotPolicy{}, fmt.Errorf("仅允许已验证住宅或原生机房 SSTP 出口，当前类型为 %s", image.IPType)
-	}
-	policy, err := normalizePolicy(SlotPolicy{Country: actualCountry, AllowedIPTypes: []string{image.IPType}})
+	// A successful VPS observation already proves the SSTP tunnel, independent
+	// public exit and HTTPS content path.  The supplemental SSTP pool is a
+	// transport/source category, not a residential claim, so no IP intelligence
+	// service is required or consulted here.
+	policy, err := normalizePolicy(SlotPolicy{AllowedIPTypes: []string{"unknown"}})
 	if err != nil {
 		return "", false, SlotPolicy{}, err
 	}
-	return source, native, policy, nil
+	return exitSourceSSTP, false, policy, nil
 }
 
 func (t *Tunnel) sstpEndpoint() (SstpEndpoint, error) {

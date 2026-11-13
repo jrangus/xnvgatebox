@@ -14,9 +14,9 @@ func writeSupplementalTestManifest(t *testing.T, dir string, mutate func(*supple
 	m := supplementalManifest{
 		SchemaVersion: 1, GeneratedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour),
 		Entries: []supplementalEntry{{
-			Slot: supplementalSlotBase, SourceName: "verified test source", SourceCategory: exitSourceHome,
+			Slot: supplementalSlotBase, SourceName: "verified test source", SourceCategory: exitSourceSSTP,
 			Host: "8.8.8.8", Port: 1080, Country: "US", ExitIP: "1.1.1.1",
-			IPType: "strict_residential", LatencyMS: 120,
+			IPType: "unknown", LatencyMS: 120,
 			CheckedAt: now.Add(-30 * time.Second), ExpiresAt: now.Add(30 * time.Minute),
 		}},
 	}
@@ -32,7 +32,7 @@ func writeSupplementalTestManifest(t *testing.T, dir string, mutate func(*supple
 	}
 }
 
-func TestLoadSupplementalResidentialExit(t *testing.T) {
+func TestLoadSupplementalSSTPClassExit(t *testing.T) {
 	dir := t.TempDir()
 	writeSupplementalTestManifest(t, dir, nil)
 	exits, err := loadSupplementalExits(dir)
@@ -40,37 +40,33 @@ func TestLoadSupplementalResidentialExit(t *testing.T) {
 		t.Fatalf("load: exits=%+v err=%v", exits, err)
 	}
 	got := exits[0]
-	if got.SourceCategory != exitSourceHome || got.ProxyAddress != "8.8.8.8" || got.ProxyPort != 1080 || got.Status != "up" || got.Egress == nil || got.Egress.IPType != "strict_residential" {
+	if got.SourceCategory != exitSourceSSTP || got.ProxyAddress != "8.8.8.8" || got.ProxyPort != 1080 || got.Status != "up" || got.Egress == nil || got.Egress.IPType != "unknown" {
 		t.Fatalf("unexpected exit: %+v", got)
 	}
 }
 
-func TestLoadSupplementalNativeDatacenterExit(t *testing.T) {
+func TestLoadSupplementalMigratesLegacyCategories(t *testing.T) {
 	dir := t.TempDir()
 	writeSupplementalTestManifest(t, dir, func(m *supplementalManifest) {
-		m.Entries[0].SourceCategory = exitSourceNativeDC
+		m.Entries[0].SourceCategory = exitSourceLegacyNativeDC
 		m.Entries[0].IPType = "datacenter"
 		m.Entries[0].Native = true
 	})
 	exits, err := loadSupplementalExits(dir)
-	if err != nil || len(exits) != 1 || !exits[0].Native {
-		t.Fatalf("load native datacenter: exits=%+v err=%v", exits, err)
+	if err != nil || len(exits) != 1 || exits[0].SourceCategory != exitSourceSSTP {
+		t.Fatalf("load legacy category: exits=%+v err=%v", exits, err)
 	}
 }
 
 func TestLoadSupplementalRejectsUnverifiedOrUnsafeEntries(t *testing.T) {
 	tests := map[string]func(*supplementalManifest){
 		"stable category injection": func(m *supplementalManifest) { m.Entries[0].SourceCategory = exitSourceStable },
-		"unverified residential":    func(m *supplementalManifest) { m.Entries[0].IPType = "unknown" },
-		"false native": func(m *supplementalManifest) {
-			m.Entries[0].SourceCategory, m.Entries[0].IPType = exitSourceNativeDC, "datacenter"
-		},
-		"private proxy":       func(m *supplementalManifest) { m.Entries[0].Host = "127.0.0.1" },
-		"ipv6 proxy":          func(m *supplementalManifest) { m.Entries[0].Host = "2001:4860:4860::8888" },
-		"hostname proxy":      func(m *supplementalManifest) { m.Entries[0].Host = "proxy.example" },
-		"expired evidence":    func(m *supplementalManifest) { m.Entries[0].ExpiresAt = time.Now().Add(-time.Minute) },
-		"stable slot overlap": func(m *supplementalManifest) { m.Entries[0].Slot = 1 },
-		"half credentials":    func(m *supplementalManifest) { m.Entries[0].Username = "user" },
+		"private proxy":             func(m *supplementalManifest) { m.Entries[0].Host = "127.0.0.1" },
+		"ipv6 proxy":                func(m *supplementalManifest) { m.Entries[0].Host = "2001:4860:4860::8888" },
+		"hostname proxy":            func(m *supplementalManifest) { m.Entries[0].Host = "proxy.example" },
+		"expired evidence":          func(m *supplementalManifest) { m.Entries[0].ExpiresAt = time.Now().Add(-time.Minute) },
+		"stable slot overlap":       func(m *supplementalManifest) { m.Entries[0].Slot = 1 },
+		"half credentials":          func(m *supplementalManifest) { m.Entries[0].Username = "user" },
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {

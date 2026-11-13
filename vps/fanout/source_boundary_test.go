@@ -7,9 +7,8 @@ import (
 
 func TestSubscriptionSourceLabelsStayDistinct(t *testing.T) {
 	for source, want := range map[string]string{
-		exitSourceStable:   "xnvgatebox稳定 / VPN Gate OpenVPN",
-		exitSourceHome:     "新增住宅 / VPN Gate SSTP",
-		exitSourceNativeDC: "新增原生机房 / VPN Gate SSTP",
+		exitSourceStable: "xnvgatebox稳定 / VPN Gate OpenVPN",
+		exitSourceSSTP:   "SSTP 出口池",
 	} {
 		if got := subscriptionSourceLabel(source); got != want {
 			t.Fatalf("source %q label = %q, want %q", source, got, want)

@@ -1311,14 +1311,14 @@
           </div>
           <div id="resourceSstpPane" hidden>
             <div class="notice">
-              通过 VPS 检测的住宅或原生机房 SSTP，可以点击“加入 VPS
+              通过 VPS 连通性检测的 SSTP，可以直接点击“加入 VPS
               出口池”。系统会在独立网络命名空间内持续维护 SSTP/PPP，并生成仅监听
               127.0.0.1 的 SOCKS5 出口；之后可像 xnvgatebox 稳定池一样在 3x-ui
-              中生成 VLESS/VMess/Trojan 订阅。它仍归入“新增住宅”或“新增原生机房”，不会混入
-              xnvgatebox 稳定池。CF 仍暂停，来源地区不代表实际出口国家。
+              中生成 VLESS/VMess/Trojan 订阅。所有新增 SSTP 和补充来源统一归入“SSTP 出口池”，
+              不检测或声称住宅属性，也不会混入 xnvgatebox 稳定池。CF 仍暂停，来源地区不代表实际出口国家。
             </div>
             <div class="notice">
-              本页执行 SSTP/PPP 检测，用于新增住宅池或新增原生机房池；“候选节点”页执行 OpenVPN 检测，用于 xnvgatebox 稳定池。两者可以读取同一份 VPN Gate 原始候选，但协议、验证证据和最终分类互不混用。
+              本页执行 SSTP/PPP 检测，用于 SSTP 出口池；“候选节点”页执行 OpenVPN 检测，用于 xnvgatebox 稳定池。两者可以读取同一份 VPN Gate 原始候选，但协议、验证证据和最终分类互不混用。
             </div>
             <details class="card pad" style="margin: 20px 0">
               <summary>直接 SSTP 与 VPS 出口有什么区别？</summary>
@@ -1927,8 +1927,7 @@
         return sourceCategoryLabel(e.source_category) + " · " + country(verified(e)) + " · " + String(e.slot).padStart(2, "0");
       }
       function sourceCategoryLabel(source) {
-        if (source === "new_residential") return "新增住宅";
-        if (source === "new_native_datacenter") return "新增原生机房";
+        if (["sstp_pool", "new_residential", "new_native_datacenter"].includes(source)) return "SSTP 出口池";
         return "xnvgatebox稳定";
       }
       function badge(status) {
@@ -2978,7 +2977,7 @@
             : "当前 " + (supplementalData.active || 0) + " 个；上次保留 " + (supplementalData.last_kept || 0) + " 个";
         $("supplementalRows").innerHTML = supplementalExits.length
           ? supplementalExits.map((e) => "<tr><td>" +
-              (e.source_category === "new_residential" ? "新增住宅 IP" : "新增原生机房 IP") +
+              "SSTP 类 IP" +
               "</td><td>" + esc(e.country || e.region || "—") +
               "</td><td>" + esc(e.exit_ip || "—") +
               "</td><td>" + esc(types[e.egress?.ip_type] || e.egress?.ip_type || "—") +
@@ -3517,10 +3516,7 @@
         $("exitCountry").value = p.country || "";
         $("exitLatency").value = p.maximum_latency_ms || 0;
 		const typeEntries = Object.entries(types).filter(([kind]) =>
-			currentExit.transport !== "sstp" ||
-			(currentExit.source_category === "new_residential"
-				? ["strict_residential", "likely_residential"].includes(kind)
-				: ["datacenter", "business_isp"].includes(kind)),
+			currentExit.transport !== "sstp" || kind === "unknown",
 		);
         $("typeChoices").innerHTML = typeEntries
           .map(

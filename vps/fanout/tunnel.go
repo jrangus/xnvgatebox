@@ -90,10 +90,10 @@ func (t *Tunnel) transport() string {
 }
 
 func (t *Tunnel) sourceCategory() string {
-	if t.SourceCategory == exitSourceHome || t.SourceCategory == exitSourceNativeDC {
-		return t.SourceCategory
+	if t.transport() == tunnelTransportSSTP {
+		return exitSourceSSTP
 	}
-	return exitSourceStable
+	return normalizedExitSource(t.SourceCategory)
 }
 
 // prevHostOf 读"换节点未收尾"标记。

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -29,13 +30,8 @@ func probeThirdParty(ctx context.Context, p ThirdPartyProxy, dir string) ThirdPa
 			r.ExpiresAt = exp
 		}
 	}
-	if image.IntelligenceStatus == "passed" {
-		r.City, r.IPType = stringValue(image.City), image.IPType
-		r.Native = image.CountryEvidence != nil && image.CountryEvidence.Status == "passed" && r.Country != ""
-		if exp, err := time.Parse(time.RFC3339Nano, image.ExpiresAt); err == nil && exp.Before(r.ExpiresAt) {
-			r.ExpiresAt = exp
-		}
-	}
+	r.IPType = "unknown"
+	r.Native = false
 	r.CheckedAt = time.Now()
 	return r
 }
@@ -101,6 +97,9 @@ func lookupThirdPartyEgress(ctx context.Context, dir, ip string) EgressProfile {
 	bounded, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(bounded, "python3", envOr("FANOUT_TOOLBOX_SCRIPT", "/usr/local/lib/xnvgatebox/scripts/toolbox.py"), "--config", envOr("FANOUT_POOL_CONFIG", "/etc/xnvgatebox/pool.json"), "--env-file", envOr("FANOUT_INTELLIGENCE_ENV_FILE", "/etc/xnvgatebox/intelligence.env"), "profile-socks5", "--ip", ip, "--country", "--cache", filepath.Join(dir, "intelligence", "socks5-cache.json"))
+	// The supplemental pool uses only the independent country lookup. Explicit
+	// empty values prevent the private env file from enabling IP classification.
+	cmd.Env = append(os.Environ(), "INTELLIGENCE_URL_TEMPLATE=", "INTELLIGENCE_TOKEN=")
 	out, err := cmdOutput(cmd)
 	if err != nil {
 		return unknown

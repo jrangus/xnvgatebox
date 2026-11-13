@@ -204,9 +204,14 @@ func decodePersistedState(blob []byte, maxSlots int, residential bool) (*persist
 				return nil, fmt.Errorf("Slot %d 稳定出口来源无效", p.Slot)
 			}
 		} else {
-			if (p.SourceCategory != exitSourceHome && p.SourceCategory != exitSourceNativeDC) || p.SSTPPort < 1 || p.SSTPPort > 65535 || !sstpPublicIPv4(p.ServerIP) {
+			if p.SourceCategory == exitSourceLegacyHome || p.SourceCategory == exitSourceLegacyNativeDC {
+				p.SourceCategory = exitSourceSSTP
+			}
+			if p.SourceCategory != exitSourceSSTP || p.SSTPPort < 1 || p.SSTPPort > 65535 || !sstpPublicIPv4(p.ServerIP) {
 				return nil, fmt.Errorf("Slot %d 持久 SSTP 来源无效", p.Slot)
 			}
+			p.Policy = &SlotPolicy{AllowedIPTypes: []string{"unknown"}}
+			p.PreviousPolicy = nil
 			candidateNode := Node{HostName: p.HostName, IP: p.ServerIP, SSTPCandidates: p.SSTPCandidates}
 			matched := false
 			for _, endpoint := range p.SSTPCandidates {
